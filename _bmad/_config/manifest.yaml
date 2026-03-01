@@ -1,0 +1,14 @@
+installation:
+  version: 6.0.3
+  installDate: 2026-02-28T17:46:41.569Z
+  lastUpdated: 2026-02-28T17:46:41.569Z
+modules:
+  - name: core
+    version: 6.0.3
+    installDate: 2026-02-28T17:46:41.569Z
+    lastUpdated: 2026-02-28T17:46:41.569Z
+    source: built-in
+    npmPackage: null
+    repoUrl: null
+ides:
+  - gemini
