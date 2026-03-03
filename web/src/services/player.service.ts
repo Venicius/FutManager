@@ -1,7 +1,7 @@
 import { collection, addDoc, getDocs, doc, updateDoc, query, orderBy, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
-export type TipoVinculo = "Mensalista" | "Diarista";
+export type TipoVinculo = "Mensalista" | "Diarista" | "Espera";
 export type StatusJogador = "Ativo" | "Inativo";
 
 export interface Jogador {
@@ -48,18 +48,32 @@ export async function addPlayer(playerData: Omit<Jogador, "id">): Promise<string
 }
 
 /**
- * Busca todos os jogadores na coleção ordenados alfabeticamente.
+ * Busca jogadores na coleção ordenados alfabeticamente.
  * 
+ * @param vincFilter Se informado, filtra pelo campo `vinculo` (ex: 'Espera')
  * @returns Array de jogadores com ID preenchido
  */
-export async function getPlayers(): Promise<Jogador[]> {
-  const q = query(collection(db, COLLECTION_NAME), orderBy("nome", "asc"));
+export async function getPlayers(vincFilter?: string): Promise<Jogador[]> {
+  const constraints = vincFilter
+    ? [where("vinculo", "==", vincFilter), orderBy("nome", "asc")]
+    : [orderBy("nome", "asc")];
+  const q = query(collection(db, COLLECTION_NAME), ...constraints);
   const querySnapshot = await getDocs(q);
-  
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...(doc.data() as Omit<Jogador, "id">)
+
+  return querySnapshot.docs.map(d => ({
+    id: d.id,
+    ...(d.data() as Omit<Jogador, "id">)
   }));
+}
+
+/**
+ * Promove um jogador da Lista de Espera para Mensalista.
+ *
+ * @param id ID do documento do jogador no Firestore
+ */
+export async function promotePlayerToMonthly(id: string): Promise<void> {
+  const docRef = doc(db, COLLECTION_NAME, id);
+  await updateDoc(docRef, { vinculo: "Mensalista" });
 }
 
 /**
