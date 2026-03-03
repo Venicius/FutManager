@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getTransactions, addTransaction, type Transaction, type TipoTransacao } from "@/services/transaction.service";
 import { calculateTotalBalance } from "@/services/financial.service";
 import toast from "react-hot-toast";
@@ -23,17 +23,17 @@ function ico(c: string) {
 
 function CardSaldo({ saldo, entradas, saidas }: { saldo: number; entradas: number; saidas: number }) {
   return (
-    <div className="mx-4 rounded-3xl bg-emerald-600 p-6 shadow-lg shadow-emerald-200">
-      <p className="text-sm font-medium text-emerald-100">Saldo Atual</p>
-      <p className="mt-1 text-4xl font-extrabold tracking-tight text-white">{fmt(saldo)}</p>
+    <div className="mx-4 rounded-3xl bg-emerald-600 p-6 shadow-lg shadow-emerald-200 print:shadow-none print:rounded-xl print:border print:border-emerald-200">
+      <p className="text-sm font-medium text-emerald-100 print:text-emerald-800">Saldo Atual</p>
+      <p className="mt-1 text-4xl font-extrabold tracking-tight text-white print:text-emerald-900">{fmt(saldo)}</p>
       <div className="mt-5 flex gap-3">
-        <div className="flex-1 rounded-2xl bg-white/20 px-4 py-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-100">Entradas</p>
-          <p className="mt-0.5 text-base font-bold text-white">+{fmt(entradas)}</p>
+        <div className="flex-1 rounded-2xl bg-white/20 px-4 py-3 print:bg-emerald-50">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-100 print:text-emerald-700">Entradas</p>
+          <p className="mt-0.5 text-base font-bold text-white print:text-emerald-800">+{fmt(entradas)}</p>
         </div>
-        <div className="flex-1 rounded-2xl bg-rose-500/80 px-4 py-3 shadow-inner">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-rose-100">Saídas</p>
-          <p className="mt-0.5 text-base font-bold text-white">-{fmt(saidas)}</p>
+        <div className="flex-1 rounded-2xl bg-rose-500/80 px-4 py-3 shadow-inner print:bg-rose-50 print:shadow-none">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-rose-100 print:text-rose-700">Saídas</p>
+          <p className="mt-0.5 text-base font-bold text-white print:text-rose-800">-{fmt(saidas)}</p>
         </div>
       </div>
     </div>
@@ -186,6 +186,8 @@ export default function CaixaPage() {
   const [modalAberto, setModalAberto] = useState(false);
   const [transacoes, setTransacoes] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exportMenuAberto, setExportMenuAberto] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   async function carregar() {
     setLoading(true);
@@ -203,17 +205,100 @@ export default function CaixaPage() {
     carregar();
   }, []);
 
+  // Fecha o menu ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportMenuAberto(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   // Usa o financial.service puro para a matemática
   const saldo = calculateTotalBalance(transacoes);
   const ent = transacoes.filter((t) => t.type === "ENTRADA").reduce((a, t) => a + t.amount, 0);
   const sai = transacoes.filter((t) => t.type === "SAIDA").reduce((a, t) => a + t.amount, 0);
 
+  function exportToCSV() {
+    const sep = ";";
+    const headers = ["Data", "Descrição", "Tipo", "Valor"].join(sep);
+    const rows = transacoes.map((t) => {
+      const data = new Date(t.date).toLocaleDateString("pt-BR");
+      const descricao = `"${t.description.replace(/"/g, '""')}"`;
+      const tipo = t.type === "ENTRADA" ? "Entrada" : "Saída";
+      const valor = t.amount.toFixed(2).replace(".", ",");
+      return [data, descricao, tipo, valor].join(sep);
+    });
+    const csv = [headers, ...rows].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "relatorio_caixa.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+    setExportMenuAberto(false);
+    toast.success("Download do relatório iniciado!");
+  }
+
+  function handlePrint() {
+    setExportMenuAberto(false);
+    setTimeout(() => window.print(), 100);
+  }
+
   return (
     <div className="min-h-screen">
-      <header className="px-4 pb-4 pt-6 md:pt-2">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">💰 Caixa</h1>
-        <p className="mt-0.5 text-sm text-slate-500">Fluxo de caixa da pelada</p>
+      <header className="px-4 pb-4 pt-6 md:pt-2 flex items-start justify-between gap-3 print:hidden">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">💰 Caixa</h1>
+          <p className="mt-0.5 text-sm text-slate-500">Fluxo de caixa da pelada</p>
+        </div>
+
+        {/* Dropdown Exportar */}
+        <div className="relative mt-1" ref={exportMenuRef}>
+          <button
+            onClick={() => setExportMenuAberto((v) => !v)}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-600 shadow-sm transition-all hover:border-slate-300 hover:bg-slate-50 active:scale-95"
+          >
+            <span>📤</span> Exportar
+            <svg className={`h-3.5 w-3.5 transition-transform ${exportMenuAberto ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7" /></svg>
+          </button>
+
+          {exportMenuAberto && (
+            <div className="absolute right-0 top-full z-20 mt-1.5 w-52 rounded-2xl border border-slate-100 bg-white py-1.5 shadow-lg shadow-slate-200/60">
+              <button
+                onClick={exportToCSV}
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                <span className="text-base">📊</span>
+                <div className="text-left">
+                  <p className="font-semibold">Baixar Excel (CSV)</p>
+                  <p className="text-[11px] text-slate-400">relatorio_caixa.csv</p>
+                </div>
+              </button>
+              <div className="mx-3 my-1 h-px bg-slate-100" />
+              <button
+                onClick={handlePrint}
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                <span className="text-base">🖨️</span>
+                <div className="text-left">
+                  <p className="font-semibold">Imprimir Relatório</p>
+                  <p className="text-[11px] text-slate-400">Gera um PDF de extrato</p>
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
       </header>
+
+      {/* Cabeçalho de impressão — visível apenas no print */}
+      <div className="hidden print:block px-4 pb-4 pt-6">
+        <h1 className="text-2xl font-bold tracking-tight text-black">Relatório de Caixa</h1>
+        <p className="mt-0.5 text-sm text-slate-600">Extrato gerado em {new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}</p>
+      </div>
 
       {loading ? (
         <section className="mt-2 px-4 flex flex-col items-center justify-center py-10">
@@ -237,7 +322,7 @@ export default function CaixaPage() {
           </section>
           
           <section className="mt-6 px-4">
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Últimas Transações</h2>
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400 print:text-slate-600 print:text-sm">Extrato de Transações</h2>
             {transacoes.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <span className="text-4xl">🍃</span>
@@ -253,7 +338,7 @@ export default function CaixaPage() {
         </>
       )}
 
-      <ModalNovoLancamento aberto={modalAberto} onFechar={() => setModalAberto(false)} onSalvo={carregar} />
+      <div className="print:hidden"><ModalNovoLancamento aberto={modalAberto} onFechar={() => setModalAberto(false)} onSalvo={carregar} /></div>
     </div>
   );
 }

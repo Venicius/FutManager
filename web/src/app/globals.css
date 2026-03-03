@@ -22,3 +22,25 @@ html {
 .animate-slide-up {
   animation: slide-up 0.3s ease-out;
 }
+
+/* ── Impressão ─────────────────────────────────────────────── */
+@media print {
+  /* Oculta todos os elementos de layout/navegação */
+  header,
+  nav,
+  button,
+  [data-toaster] {
+    display: none !important;
+  }
+
+  /* Remove padding gerado pelo layout para a navbar e o header fixo */
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+
+  body {
+    background: white !important;
+  }
+}
