@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { getPendingBillings, payBilling, type Cobranca, type StatusCobranca } from "@/services/billing.service";
+import { useAuth } from "@/contexts/AuthContext";
 import toast from "react-hot-toast";
 
 // ── Helpers ────────────────────────────────────────────────
@@ -188,10 +189,13 @@ export default function DashboardPendencias() {
   const [modalGerar, setModalGerar] = useState(false);
   const [selCobranca, setSelCobranca] = useState<Cobranca | null>(null);
 
+  const { activeTenantId } = useAuth();
+
   async function carregarDados() {
+    if (!activeTenantId) return;
     setLoading(true);
     try {
-      const data = await getPendingBillings();
+      const data = await getPendingBillings(activeTenantId);
       setCobrancas(data);
     } catch (error) {
       console.error("Erro ao carregar cobranças:", error);
@@ -201,16 +205,16 @@ export default function DashboardPendencias() {
   }
 
   useEffect(() => {
-    carregarDados();
-  }, []);
+    if (activeTenantId) carregarDados();
+  }, [activeTenantId]);
 
   async function handlePay(cobranca: Cobranca, valorPago: number) {
-    if (payingId) return;
+    if (payingId || !activeTenantId) return;
     
     setPayingId(cobranca.id!);
     try {
       await toast.promise(
-        payBilling(cobranca.id!, cobranca, valorPago),
+        payBilling(activeTenantId, cobranca.id!, cobranca, valorPago),
         {
           loading: 'A registar pagamento...',
           success: 'Pagamento registado com sucesso!',
@@ -229,10 +233,10 @@ export default function DashboardPendencias() {
   }
 
   async function handleGenerate(valor: number, vencimento: string) {
-    if (isGenerating) return;
+    if (isGenerating || !activeTenantId) return;
     setIsGenerating(true);
     try {
-      const gerados = await import("@/services/billing.service").then(m => m.generateMonthlyBillings(valor, vencimento));
+      const gerados = await import("@/services/billing.service").then(m => m.generateMonthlyBillings(activeTenantId, valor, vencimento));
       if (gerados > 0) {
         toast.success(`Foram geradas ${gerados} novas mensalidades!`);
         setModalGerar(false);

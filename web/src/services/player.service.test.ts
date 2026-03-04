@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+
 import { updatePlayer, addPlayer, getPlayers, promotePlayerToMonthly } from "./player.service";
 import { addDoc, getDocs, updateDoc, doc, collection, query, where, orderBy } from "firebase/firestore";
 
 // Mock do módulo interno lib/firebase
-vi.mock("@/lib/firebase", () => ({
+vi.mock("../lib/firebase", () => ({
   db: {},
 }));
 
@@ -30,9 +30,9 @@ describe("player.service", () => {
       (doc as any).mockReturnValue("docRef-mock");
       (getDocs as any).mockResolvedValue({ empty: true, docs: [] });
 
-      await updatePlayer("user-1", { nome: "Novo Nome", whatsapp: "11999999999" });
+      await updatePlayer("user-1", "doc-1", { nome: "Novo Nome", whatsapp: "11999999999" });
 
-      expect(doc).toHaveBeenCalledWith(expect.anything(), "jogadores", "user-1");
+      expect(doc).toHaveBeenCalledWith(expect.anything(), "users", "user-1", "jogadores", "doc-1");
       expect(updateDoc).toHaveBeenCalledWith("docRef-mock", {
         nome: "Novo Nome",
         whatsapp: "11999999999",
@@ -44,7 +44,7 @@ describe("player.service", () => {
       (getDocs as any).mockResolvedValue({ empty: false, docs: [{ id: "user-1" }] });
 
       await expect(
-        updatePlayer("user-1", { nome: "Novo Nome", whatsapp: "11999999999" })
+        updatePlayer("user-1", "user-1", { nome: "Novo Nome", whatsapp: "11999999999" })
       ).resolves.not.toThrow();
 
       expect(updateDoc).toHaveBeenCalled();
@@ -54,7 +54,7 @@ describe("player.service", () => {
       (getDocs as any).mockResolvedValue({ empty: false, docs: [{ id: "user-qualquer" }] });
 
       await expect(
-        updatePlayer("user-1", { whatsapp: "11999999999" })
+        updatePlayer("user-1", "user-1", { whatsapp: "11999999999" })
       ).rejects.toThrow("Já existe outro jogador cadastrado com este número de WhatsApp.");
 
       expect(updateDoc).not.toHaveBeenCalled();
@@ -70,10 +70,8 @@ describe("player.service", () => {
       ];
       (getDocs as any).mockResolvedValue({ docs: mockDocs });
 
-      const result = await getPlayers();
+      const result = await getPlayers("user-1");
 
-      // Não deve adicionar cláusula where
-      expect(where).not.toHaveBeenCalled();
       expect(orderBy).toHaveBeenCalledWith("nome", "asc");
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe("1");
@@ -86,7 +84,7 @@ describe("player.service", () => {
       ];
       (getDocs as any).mockResolvedValue({ docs: mockDocs });
 
-      const result = await getPlayers("Espera");
+      const result = await getPlayers("user-1", "Espera");
 
       expect(where).toHaveBeenCalledWith("vinculo", "==", "Espera");
       expect(result).toHaveLength(1);
@@ -100,9 +98,9 @@ describe("player.service", () => {
       (doc as any).mockReturnValue("docRef-espera");
       (updateDoc as any).mockResolvedValue(undefined);
 
-      await promotePlayerToMonthly("jogador-espera-1");
+      await promotePlayerToMonthly("user-1", "jogador-espera-1");
 
-      expect(doc).toHaveBeenCalledWith(expect.anything(), "jogadores", "jogador-espera-1");
+      expect(doc).toHaveBeenCalledWith(expect.anything(), "users", "user-1", "jogadores", "jogador-espera-1");
       expect(updateDoc).toHaveBeenCalledWith("docRef-espera", { vinculo: "Mensalista" });
     });
 
@@ -110,7 +108,7 @@ describe("player.service", () => {
       (doc as any).mockReturnValue("docRef-espera");
       (updateDoc as any).mockRejectedValue(new Error("Firestore error"));
 
-      await expect(promotePlayerToMonthly("jogador-espera-1")).rejects.toThrow("Firestore error");
+      await expect(promotePlayerToMonthly("user-1", "jogador-espera-1")).rejects.toThrow("Firestore error");
     });
   });
 });

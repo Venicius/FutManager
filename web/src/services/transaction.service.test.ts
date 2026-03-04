@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+
 import { addTransaction, getTransactions } from "./transaction.service";
 import { addDoc, getDocs } from "firebase/firestore";
 
 // Mock do módulo interno lib/firebase (precisamos apenas fazer mock do que exporta)
-vi.mock("@/lib/firebase", () => ({
+vi.mock("../lib/firebase", () => ({
   db: {}, // mock do Firestore instance
 }));
 
@@ -13,6 +13,7 @@ vi.mock("firebase/firestore", () => ({
   addDoc: vi.fn(),
   getDocs: vi.fn(),
   query: vi.fn(),
+  where: vi.fn(),
   orderBy: vi.fn(),
 }));
 
@@ -28,8 +29,9 @@ describe("transaction.service", () => {
       { id: "2", data: () => ({ description: "Arbitragem", type: "SAIDA", amount: 150, date: "2026-02-26T15:00:00", category: "Arbitragem" }) },
     ];
     (getDocs as any).mockResolvedValue({ docs: mockDocs });
+    const { where } = await import("firebase/firestore");
 
-    const transacoes = await getTransactions();
+    const transacoes = await getTransactions("user-1");
 
     expect(transacoes).toHaveLength(2);
     expect(transacoes[0].id).toBe("1");
@@ -51,10 +53,10 @@ describe("transaction.service", () => {
       date: "2026-03-01T10:00:00",
     };
 
-    const id = await addTransaction(novaTransacao);
+    const id = await addTransaction("user-1", novaTransacao);
 
     expect(id).toBe("doc-123");
     expect(addDoc).toHaveBeenCalledTimes(1);
-    expect(addDoc).toHaveBeenCalledWith(undefined, novaTransacao); // O primeiro argumento é collection(), que mockamos
+    expect(addDoc).toHaveBeenCalledWith(undefined, { ...novaTransacao }); // O primeiro argumento é collection(), que mockamos
   });
 });

@@ -10,6 +10,7 @@ import {
   TipoVinculo,
   StatusJogador,
 } from "@/services/player.service";
+import { useAuth } from "@/contexts/AuthContext";
 import toast from "react-hot-toast";
 
 // ── Helpers ────────────────────────────────────────────────
@@ -142,6 +143,7 @@ function ModalNovoJogador({
   const [vinculo, setVinculo] = useState<TipoVinculo>("Mensalista");
   const [status, setStatus] = useState<StatusJogador>("Ativo");
   const [salvando, setSalvando] = useState(false);
+  const { activeTenantId } = useAuth();
 
   useEffect(() => {
     if (jogadorEdit && aberto) {
@@ -158,7 +160,7 @@ function ModalNovoJogador({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (salvando) return;
+    if (salvando || !activeTenantId) return;
 
     setSalvando(true);
     try {
@@ -171,8 +173,8 @@ function ModalNovoJogador({
       };
 
       const req = isEditing
-        ? updatePlayer(jogadorEdit.id!, parsedData)
-        : addPlayer(parsedData).then(() => {});
+        ? updatePlayer(activeTenantId, jogadorEdit.id!, parsedData)
+        : addPlayer(activeTenantId, parsedData).then(() => {});
 
       await toast.promise(req, {
         loading: isEditing ? "A atualizar jogador..." : "A guardar jogador...",
@@ -308,11 +310,13 @@ export default function ElencoPage() {
   const [jogadores, setJogadores] = useState<Jogador[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ActiveTab>("elenco");
+  const { activeTenantId } = useAuth();
 
   async function carregarJogadores() {
+    if (!activeTenantId) return;
     setLoading(true);
     try {
-      const data = await getPlayers();
+      const data = await getPlayers(activeTenantId);
       setJogadores(data);
     } catch (error) {
       console.error("Erro ao carregar jogadores:", error);
@@ -322,8 +326,8 @@ export default function ElencoPage() {
   }
 
   useEffect(() => {
-    carregarJogadores();
-  }, []);
+    if (activeTenantId) carregarJogadores();
+  }, [activeTenantId]);
 
   function handleEdit(jogador: Jogador) {
     setJogadorEditing(jogador);
@@ -331,8 +335,8 @@ export default function ElencoPage() {
   }
 
   async function handlePromote(jogador: Jogador) {
-    if (!jogador.id) return;
-    await toast.promise(promotePlayerToMonthly(jogador.id), {
+    if (!jogador.id || !activeTenantId) return;
+    await toast.promise(promotePlayerToMonthly(activeTenantId, jogador.id), {
       loading: `Promovendo ${jogador.nome}...`,
       success: `${jogador.nome} é agora Mensalista! 🎉`,
       error: "Erro ao promover jogador. Tente novamente.",

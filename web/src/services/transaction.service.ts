@@ -1,5 +1,5 @@
-import { collection, addDoc, getDocs, query, orderBy } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { collection, addDoc, getDocs, query, orderBy, where } from "firebase/firestore";
+import { db } from "../lib/firebase";
 
 export type TipoTransacao = "ENTRADA" | "SAIDA";
 
@@ -17,8 +17,9 @@ const COLLECTION_NAME = "transacoes";
 /**
  * Busca todas as transações, ordenadas da mais recente para a mais antiga.
  */
-export async function getTransactions(): Promise<Transaction[]> {
-  const q = query(collection(db, COLLECTION_NAME), orderBy("date", "desc"));
+export async function getTransactions(userId: string): Promise<Transaction[]> {
+  const transRef = collection(db, "users", userId, COLLECTION_NAME);
+  const q = query(transRef, orderBy("date", "desc"));
   const querySnapshot = await getDocs(q);
   
   return querySnapshot.docs.map(doc => ({
@@ -30,7 +31,8 @@ export async function getTransactions(): Promise<Transaction[]> {
 /**
  * Adiciona uma nova transação financeira.
  */
-export async function addTransaction(transactionData: Omit<Transaction, "id">): Promise<string> {
-  const docRef = await addDoc(collection(db, COLLECTION_NAME), transactionData);
+export async function addTransaction(userId: string, transactionData: Omit<Transaction, "id">): Promise<string> {
+  const transRef = collection(db, "users", userId, COLLECTION_NAME);
+  const docRef = await addDoc(transRef, transactionData);
   return docRef.id;
 }

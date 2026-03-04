@@ -1,5 +1,5 @@
 import { collection, doc, updateDoc, getDocs, query, where, orderBy, addDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db } from "../lib/firebase";
 import { addTransaction } from "./transaction.service";
 import { getPlayers } from "./player.service";
 
@@ -14,6 +14,7 @@ export interface Cobranca {
   status: StatusCobranca;
   valor: number;
   referencia: string;
+  dueDate?: string;
 }
 
 const COLLECTION_NAME = "cobrancas";
@@ -21,9 +22,10 @@ const COLLECTION_NAME = "cobrancas";
 /**
  * Busca todas as cobranças que ainda não foram pagas (Pendente ou Atrasado).
  */
-export async function getPendingBillings(): Promise<Cobranca[]> {
+export async function getPendingBillings(userId: string): Promise<Cobranca[]> {
+  const billsRef = collection(db, "users", userId, COLLECTION_NAME);
   const q = query(
-    collection(db, COLLECTION_NAME),
+    billsRef,
     where("status", "in", ["PENDENTE", "ATRASADO"])
   );
   
@@ -45,10 +47,10 @@ export async function getPendingBillings(): Promise<Cobranca[]> {
  * 3. Lança crédito se pago a maior.
  * 4. Lança transação financeira.
  */
-export async function payBilling(billingId: string, cobranca: Cobranca, valorPago: number): Promise<void> {
+export async function payBilling(userId: string, billingId: string, cobranca: Cobranca, valorPago: number): Promise<void> {
   try {
     const diferenca = valorPago - cobranca.valor;
-    const docRef = doc(db, COLLECTION_NAME, billingId);
+    const docRef = doc(db, "users", userId, COLLECTION_NAME, billingId);
 
     if (diferenca >= 0) {
       // Pagamento total ou a maior
@@ -56,10 +58,10 @@ export async function payBilling(billingId: string, cobranca: Cobranca, valorPag
 
       if (diferenca > 0) {
         // Lançar crédito para o jogador
-        const jogadores = await getPlayers();
+        const jogadores = await getPlayers(userId);
         const jogador = jogadores.find(j => j.id === cobranca.jogadorId);
         if (jogador) {
-          const jogadorRef = doc(db, 'jogadores', jogador.id!);
+          const jogadorRef = doc(db, "users", userId, "jogadores", jogador.id!);
           await updateDoc(jogadorRef, {
             creditoAcumulado: (jogador.creditoAcumulado || 0) + diferenca
           });
@@ -73,7 +75,7 @@ export async function payBilling(billingId: string, cobranca: Cobranca, valorPag
     }
 
     // 2. Registrar no Caixa (Transação Automática com valor REAL pago)
-    await addTransaction({
+    await addTransaction(userId, {
       description: 'Pagamento: ' + cobranca.nomeJogador + ' (' + cobranca.referencia + ')',
       amount: Number(valorPago),
       category: cobranca.vinculo === "Mensalista" ? "Mensalidade" : "Avulso",
@@ -90,8 +92,8 @@ export async function payBilling(billingId: string, cobranca: Cobranca, valorPag
  * Gera as cobranças do mês para todos os jogadores Mensalistas ativos.
  * Aplica abatimento automático de créditos acumulados.
  */
-export async function generateMonthlyBillings(amount: number, dueDate: string): Promise<number> {
-  const jogadores = await getPlayers();
+export async function generateMonthlyBillings(userId: string, amount: number, dueDate: string): Promise<number> {
+  const jogadores = await getPlayers(userId);
   const mensalistasAtivos = jogadores.filter(j => j.vinculo === "Mensalista" && j.status === "Ativo");
 
   const now = new Date();
@@ -102,8 +104,9 @@ export async function generateMonthlyBillings(amount: number, dueDate: string): 
   for (const jogador of mensalistasAtivos) {
     if (!jogador.id) continue;
 
+    const billsRef = collection(db, "users", userId, COLLECTION_NAME);
     const q = query(
-      collection(db, COLLECTION_NAME),
+      billsRef,
       where("jogadorId", "==", jogador.id),
       where("referencia", "==", mesAtual)
     );
@@ -125,7 +128,7 @@ export async function generateMonthlyBillings(amount: number, dueDate: string): 
         novoCredito = 0;
       }
 
-      await addDoc(collection(db, COLLECTION_NAME), {
+      await addDoc(billsRef, {
         jogadorId: jogador.id,
         nomeJogador: jogador.nome,
         vinculo: "Mensalista",
@@ -136,7 +139,7 @@ export async function generateMonthlyBillings(amount: number, dueDate: string): 
       });
 
       if (novoCredito !== credito) {
-        const jogadorRef = doc(db, 'jogadores', jogador.id);
+        const jogadorRef = doc(db, "users", userId, "jogadores", jogador.id);
         await updateDoc(jogadorRef, { creditoAcumulado: novoCredito });
       }
 
@@ -155,6 +158,7 @@ export async function generateMonthlyBillings(amount: number, dueDate: string): 
  * Gera as cobranças para os diaristas presentes em uma partida específica.
  */
 export async function generateMatchBillings(
+  userId: string,
   matchId: string, 
   matchTitle: string, 
   presentPlayerIds: string[], 
@@ -171,16 +175,16 @@ export async function generateMatchBillings(
   for (const jogador of diaristasPresentes) {
     if (!jogador.id) continue;
     
-    // Verificar se já existe cobrança pra essa partida e jogador
+    const billsRef = collection(db, "users", userId, COLLECTION_NAME);
     const q = query(
-      collection(db, COLLECTION_NAME),
+      billsRef,
       where("jogadorId", "==", jogador.id),
       where("referencia", "==", `Partida: ${matchTitle} - ${matchId}`)
     );
     const snap = await getDocs(q);
     
     if (snap.empty) {
-      await addDoc(collection(db, COLLECTION_NAME), {
+      await addDoc(billsRef, {
         jogadorId: jogador.id,
         nomeJogador: jogador.nome,
         vinculo: "Diarista",

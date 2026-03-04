@@ -9,12 +9,15 @@ import {
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut
 } from "firebase/auth";
-import { auth, googleProvider } from "@/lib/firebase";
+import { auth, db, googleProvider } from "@/lib/firebase";
 import toast from "react-hot-toast";
+import { collection, query, where, getDocs } from "firebase/firestore";
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  activeTenantId: string | null;
+  userRole: string | null;
   signInWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   registerWithEmail: (email: string, pass: string) => Promise<void>;
@@ -26,10 +29,37 @@ const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTenantId, setActiveTenantId] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      
+      if (currentUser && currentUser.email) {
+        try {
+          const accessRef = collection(db, "tenant_access");
+          const q = query(accessRef, where("email", "==", currentUser.email.toLowerCase()));
+          const snap = await getDocs(q);
+          
+          if (!snap.empty) {
+            const docData = snap.docs[0].data();
+            setActiveTenantId(docData.ownerUid);
+            setUserRole(docData.role);
+          } else {
+            setActiveTenantId(currentUser.uid);
+            setUserRole("owner");
+          }
+        } catch (error) {
+          console.error("Erro ao resolver tenant:", error);
+          setActiveTenantId(currentUser.uid);
+          setUserRole("owner");
+        }
+      } else {
+        setActiveTenantId(null);
+        setUserRole(null);
+      }
+      
       setLoading(false);
     });
     return () => unsubscribe();
@@ -101,7 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, loginWithEmail, registerWithEmail, logout }}>
+    <AuthContext.Provider value={{ user, loading, activeTenantId, userRole, signInWithGoogle, loginWithEmail, registerWithEmail, logout }}>
       {children}
     </AuthContext.Provider>
   );

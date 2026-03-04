@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { getTransactions, addTransaction, type Transaction, type TipoTransacao } from "@/services/transaction.service";
 import { calculateTotalBalance } from "@/services/financial.service";
+import { useAuth } from "@/contexts/AuthContext";
 import toast from "react-hot-toast";
 
 type CategoriaTransacao = "Mensalidade" | "Avulso" | "Arbitragem" | "Aluguel" | "Bolas" | "Água" | "Confraternização" | "Outros";
@@ -71,16 +72,17 @@ function ModalNovoLancamento({ aberto, onFechar, onSalvo }: { aberto: boolean; o
     return now.toISOString().slice(0, 16);
   });
   const [salvando, setSalvando] = useState(false);
+  const { activeTenantId } = useAuth();
 
   if (!aberto) return null;
 
   async function sub(e: React.FormEvent) {
     e.preventDefault();
-    if (salvando) return;
+    if (salvando || !activeTenantId) return;
     
     setSalvando(true);
     try {
-      await addTransaction({
+      await addTransaction(activeTenantId, {
         description: desc.trim(),
         amount: parseFloat(val.replace(",", ".")),
         category: cat,
@@ -188,11 +190,13 @@ export default function CaixaPage() {
   const [loading, setLoading] = useState(true);
   const [exportMenuAberto, setExportMenuAberto] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  const { activeTenantId } = useAuth();
 
   async function carregar() {
+    if (!activeTenantId) return;
     setLoading(true);
     try {
-      const data = await getTransactions();
+      const data = await getTransactions(activeTenantId);
       setTransacoes(data);
     } catch (error) {
       console.error("Erro ao carregar transações", error);
@@ -202,8 +206,8 @@ export default function CaixaPage() {
   }
 
   useEffect(() => {
-    carregar();
-  }, []);
+    if (activeTenantId) carregar();
+  }, [activeTenantId]);
 
   // Fecha o menu ao clicar fora
   useEffect(() => {

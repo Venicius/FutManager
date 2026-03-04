@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { getMatches, createMatch, updateMatch, deleteMatch, toggleAttendance, type Partida } from "@/services/match.service";
 import { getPlayers, type Jogador } from "@/services/player.service";
 import { generateMatchBillings } from "@/services/billing.service";
+import { useAuth } from "@/contexts/AuthContext";
 
 function fmtPartida(iso: string) {
   const d = new Date(iso);
@@ -52,6 +53,7 @@ function ModalNovaPartida({ aberto, onFechar, onSalvo, partidaEdit }: { aberto: 
   const [titulo, setTitulo] = useState("Pelada de Sábado");
   const [data, setData] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const { activeTenantId } = useAuth();
 
   useEffect(() => {
     if (partidaEdit && aberto) {
@@ -68,14 +70,14 @@ function ModalNovaPartida({ aberto, onFechar, onSalvo, partidaEdit }: { aberto: 
   
   async function sub(e: React.FormEvent) { 
     e.preventDefault(); 
-    if (salvando) return;
+    if (salvando || !activeTenantId) return;
     setSalvando(true);
     
     try {
       const isEditing = !!partidaEdit?.id;
       const dataIso = new Date(data).toISOString();
 
-      const req = isEditing ? updateMatch(partidaEdit.id!, { titulo: titulo.trim(), data: dataIso }) : createMatch(titulo.trim(), dataIso).then(() => {});
+      const req = isEditing ? updateMatch(activeTenantId, partidaEdit.id!, { titulo: titulo.trim(), data: dataIso }) : createMatch(activeTenantId, titulo.trim(), dataIso).then(() => {});
 
       await toast.promise(
         req,
@@ -126,11 +128,13 @@ function ModalPresenca({ partida, onFechar, onAtualizar }: { partida: Partida; o
   
   // Clonamos a lista de presenças para o estado local para otimizar a atualização da UI optimista
   const [presentesLocal, setPresentesLocal] = useState<string[]>(partida.presentPlayers || []);
+  const { activeTenantId } = useAuth();
 
   useEffect(() => {
     async function carregar() {
+      if (!activeTenantId) return;
       try {
-        const allPlayers = await getPlayers();
+        const allPlayers = await getPlayers(activeTenantId);
         // Filtra apenas ativos
         setJogadores(allPlayers.filter(j => j.status === "Ativo"));
       } catch (err) {
@@ -139,8 +143,8 @@ function ModalPresenca({ partida, onFechar, onAtualizar }: { partida: Partida; o
         setLoading(false);
       }
     }
-    carregar();
-  }, []);
+    if (activeTenantId) carregar();
+  }, [activeTenantId]);
 
   async function handleToggle(jogadorId: string) {
     if (!jogadorId || !partida.id) return;
@@ -154,7 +158,8 @@ function ModalPresenca({ partida, onFechar, onAtualizar }: { partida: Partida; o
     );
 
     try {
-      await toggleAttendance(partida.id, jogadorId, novoStatus);
+      if (!activeTenantId) return;
+      await toggleAttendance(activeTenantId, partida.id, jogadorId, novoStatus);
       toast.success(novoStatus ? "Presença confirmada" : "Falta registrada", { id: "toast-presenca", duration: 2000 });
       onAtualizar(); // Para atualizar a contagem geral
     } catch (e) {
@@ -188,6 +193,7 @@ function ModalPresenca({ partida, onFechar, onAtualizar }: { partida: Partida; o
 
     await toast.promise(
       generateMatchBillings(
+        activeTenantId!,
         partida.id as string, 
         partida.titulo, 
         presentesLocal, 
@@ -276,10 +282,12 @@ export default function PartidasPage() {
   const [selId, setSelId] = useState<string | null>(null);
   const [partidas, setPartidas] = useState<Partida[]>([]);
   const [loading, setLoading] = useState(true);
+  const { activeTenantId } = useAuth();
 
   async function carregar() {
+    if (!activeTenantId) return;
     try {
-      const data = await getMatches();
+      const data = await getMatches(activeTenantId);
       setPartidas(data);
     } catch (e) {
       toast.error("Erro ao carregar partidas");
@@ -289,15 +297,15 @@ export default function PartidasPage() {
   }
 
   useEffect(() => {
-    carregar();
-  }, []);
+    if (activeTenantId) carregar();
+  }, [activeTenantId]);
 
   async function handleDeleteMatch(p: Partida) {
-    if (!p.id) return;
+    if (!p.id || !activeTenantId) return;
     if (!confirm(`Tem certeza que deseja excluir a partida "${p.titulo}"?`)) return;
 
     try {
-      await deleteMatch(p.id);
+      await deleteMatch(activeTenantId, p.id);
       toast.success("Partida excluída com sucesso");
       carregar();
     } catch (e) {

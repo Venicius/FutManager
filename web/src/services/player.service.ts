@@ -1,5 +1,5 @@
 import { collection, addDoc, getDocs, doc, updateDoc, query, orderBy, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db } from "../lib/firebase";
 
 export type TipoVinculo = "Mensalista" | "Diarista" | "Espera";
 export type StatusJogador = "Ativo" | "Inativo";
@@ -24,15 +24,17 @@ export function sanitizePhone(phone: string): string {
  * Adiciona um novo jogador na coleção "jogadores" no Firestore.
  * Bloqueia cadastro duplicado baseado no WhatsApp.
  * 
+ * @param userId ID do usuário proprietário dos dados
  * @param playerData Dados basícos do jogador
  * @returns O ID gerado do documento criado
  */
-export async function addPlayer(playerData: Omit<Jogador, "id">): Promise<string> {
+export async function addPlayer(userId: string, playerData: Omit<Jogador, "id">): Promise<string> {
   const sanitizedPhone = sanitizePhone(playerData.whatsapp);
+  const playersRef = collection(db, "users", userId, COLLECTION_NAME);
   
   // 1. Verificar duplicidade
   const q = query(
-    collection(db, COLLECTION_NAME),
+    playersRef,
     where("whatsapp", "==", sanitizedPhone)
   );
   
@@ -43,21 +45,23 @@ export async function addPlayer(playerData: Omit<Jogador, "id">): Promise<string
 
   // 2. Inserir no Firestore
   const dataToSave = { ...playerData, whatsapp: sanitizedPhone, creditoAcumulado: 0 };
-  const docRef = await addDoc(collection(db, COLLECTION_NAME), dataToSave);
+  const docRef = await addDoc(playersRef, dataToSave);
   return docRef.id;
 }
 
 /**
  * Busca jogadores na coleção ordenados alfabeticamente.
  * 
+ * @param userId ID do proprietário
  * @param vincFilter Se informado, filtra pelo campo `vinculo` (ex: 'Espera')
  * @returns Array de jogadores com ID preenchido
  */
-export async function getPlayers(vincFilter?: string): Promise<Jogador[]> {
+export async function getPlayers(userId: string, vincFilter?: string): Promise<Jogador[]> {
+  const playersRef = collection(db, "users", userId, COLLECTION_NAME);
   const constraints = vincFilter
     ? [where("vinculo", "==", vincFilter), orderBy("nome", "asc")]
     : [orderBy("nome", "asc")];
-  const q = query(collection(db, COLLECTION_NAME), ...constraints);
+  const q = query(playersRef, ...constraints);
   const querySnapshot = await getDocs(q);
 
   return querySnapshot.docs.map(d => ({
@@ -71,8 +75,8 @@ export async function getPlayers(vincFilter?: string): Promise<Jogador[]> {
  *
  * @param id ID do documento do jogador no Firestore
  */
-export async function promotePlayerToMonthly(id: string): Promise<void> {
-  const docRef = doc(db, COLLECTION_NAME, id);
+export async function promotePlayerToMonthly(userId: string, id: string): Promise<void> {
+  const docRef = doc(db, "users", userId, COLLECTION_NAME, id);
   await updateDoc(docRef, { vinculo: "Mensalista" });
 }
 
@@ -80,11 +84,13 @@ export async function promotePlayerToMonthly(id: string): Promise<void> {
  * Atualiza os dados de um jogador existente.
  * Valida a duplicidade de WhatsApp ignorando o próprio jogador.
  * 
+ * @param userId ID do proprietário (para validação segura do WhatsApp)
  * @param id ID do jogador a ser editado
  * @param playerData Novos dados do jogador
  */
-export async function updatePlayer(id: string, playerData: Partial<Omit<Jogador, "id">>): Promise<void> {
+export async function updatePlayer(userId: string, id: string, playerData: Partial<Omit<Jogador, "id">>): Promise<void> {
   const updates: any = { ...playerData };
+  const playersRef = collection(db, "users", userId, COLLECTION_NAME);
   
   if (playerData.whatsapp) {
     const sanitizedPhone = sanitizePhone(playerData.whatsapp);
@@ -92,7 +98,7 @@ export async function updatePlayer(id: string, playerData: Partial<Omit<Jogador,
     
     // Verificar duplicidade (somente se não for o próprio jogador)
     const q = query(
-      collection(db, COLLECTION_NAME),
+      playersRef,
       where("whatsapp", "==", sanitizedPhone)
     );
     
@@ -103,6 +109,6 @@ export async function updatePlayer(id: string, playerData: Partial<Omit<Jogador,
     }
   }
 
-  const docRef = doc(db, COLLECTION_NAME, id);
+  const docRef = doc(db, "users", userId, COLLECTION_NAME, id);
   await updateDoc(docRef, updates);
 }

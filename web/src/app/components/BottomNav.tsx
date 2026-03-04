@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: "/partidas", icon: "📅", label: "Partidas" },
   { href: "/jogadores", icon: "👥", label: "Elenco" },
   { href: "/caixa", icon: "💰", label: "Caixa" },
+  { href: "/configuracoes", icon: "⚙️", label: "Ajustes" },
 ];
 
 export default function BottomNav() {
