@@ -106,7 +106,7 @@ export default function ConfiguracoesPage() {
 
     try {
       await toast.promise(
-        removeAdmin(activeTenantId, id),
+        removeAdmin(id),
         {
           loading: "Removendo acesso...",
           success: "Acesso removido com sucesso!",

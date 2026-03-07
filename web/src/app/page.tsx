@@ -265,7 +265,6 @@ export default function DashboardPendencias() {
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">⚽ {groupName}</h1>
             <p className="mt-0.5 text-sm text-slate-500">Mural de Pendências</p>
           </div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-lg shadow-sm">🔔</div>
         </div>
         <div className="mt-5">
           <button 

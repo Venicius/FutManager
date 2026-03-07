@@ -21,4 +21,9 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 
+// Environment Namespace Helpers
+export const ENV = process.env.NEXT_PUBLIC_ENV || 'dev';
+export const USERS_COLLECTION = `${ENV}_users`;
+export const TENANT_ACCESS_COLLECTION = `${ENV}_tenant_access`;
+
 export { app, db, auth, googleProvider };

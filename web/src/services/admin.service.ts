@@ -1,5 +1,5 @@
 import { collection, addDoc, getDocs, doc, deleteDoc, query, orderBy, where } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { db, TENANT_ACCESS_COLLECTION } from "../lib/firebase";
 
 export type AdminRole = "admin" | "editor";
 
@@ -11,7 +11,7 @@ export interface Admin {
   createdAt: string;
 }
 
-const COLLECTION_NAME = "tenant_access";
+const COLLECTION_NAME = TENANT_ACCESS_COLLECTION;
 
 /**
  * Busca todos os administradores e editores ordenados por data de criação.
@@ -74,9 +74,9 @@ export async function addAdmin(userId: string, email: string, role: AdminRole): 
 /**
  * Remove o acesso de um administrador/editor existente.
  * 
- * @param id ID do administrador a ser removido
+ * @param docId ID do documento na coleção tenant_access
  */
-export async function removeAdmin(userId: string, id: string): Promise<void> {
-  const docRef = doc(db, COLLECTION_NAME, id);
+export async function removeAdmin(docId: string): Promise<void> {
+  const docRef = doc(db, COLLECTION_NAME, docId);
   await deleteDoc(docRef);
 }

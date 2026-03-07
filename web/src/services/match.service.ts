@@ -1,5 +1,5 @@
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove, query, orderBy, where } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { db, USERS_COLLECTION } from "../lib/firebase";
 
 export interface Partida {
   id?: string;
@@ -14,7 +14,7 @@ const COLLECTION_NAME = "partidas";
  * Cria uma nova partida.
  */
 export async function createMatch(userId: string, titulo: string, data: string): Promise<string> {
-  const matchRef = collection(db, "users", userId, COLLECTION_NAME);
+  const matchRef = collection(db, USERS_COLLECTION, userId, COLLECTION_NAME);
   const docRef = await addDoc(matchRef, {
     titulo,
     data,
@@ -27,7 +27,7 @@ export async function createMatch(userId: string, titulo: string, data: string):
  * Busca todas as partidas, ordenadas por data (decrescente).
  */
 export async function getMatches(userId: string): Promise<Partida[]> {
-  const matchRef = collection(db, "users", userId, COLLECTION_NAME);
+  const matchRef = collection(db, USERS_COLLECTION, userId, COLLECTION_NAME);
   const q = query(matchRef, orderBy("data", "desc"));
   const querySnapshot = await getDocs(q);
   
@@ -44,7 +44,7 @@ export async function getMatches(userId: string): Promise<Partida[]> {
  * @param isPresent true para adicionar, false para remover
  */
 export async function toggleAttendance(userId: string, matchId: string, playerId: string, isPresent: boolean): Promise<void> {
-  const matchRef = doc(db, "users", userId, COLLECTION_NAME, matchId);
+  const matchRef = doc(db, USERS_COLLECTION, userId, COLLECTION_NAME, matchId);
   await updateDoc(matchRef, {
     presentPlayers: isPresent ? arrayUnion(playerId) : arrayRemove(playerId)
   });
@@ -54,7 +54,7 @@ export async function toggleAttendance(userId: string, matchId: string, playerId
  * Atualiza os dados de uma partida (título e data).
  */
 export async function updateMatch(userId: string, id: string, updates: Partial<Pick<Partida, "titulo" | "data">>): Promise<void> {
-  const matchRef = doc(db, "users", userId, COLLECTION_NAME, id);
+  const matchRef = doc(db, USERS_COLLECTION, userId, COLLECTION_NAME, id);
   await updateDoc(matchRef, updates);
 }
 
@@ -62,6 +62,6 @@ export async function updateMatch(userId: string, id: string, updates: Partial<P
  * Exclui uma partida.
  */
 export async function deleteMatch(userId: string, id: string): Promise<void> {
-  const matchRef = doc(db, "users", userId, COLLECTION_NAME, id);
+  const matchRef = doc(db, USERS_COLLECTION, userId, COLLECTION_NAME, id);
   await deleteDoc(matchRef);
 }

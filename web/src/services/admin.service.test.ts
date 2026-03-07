@@ -88,7 +88,7 @@ describe("admin.service", () => {
       (doc as any).mockReturnValue("docRef-mock");
       (deleteDoc as any).mockResolvedValue(undefined);
 
-      await removeAdmin("user-1", "user-123");
+      await removeAdmin("user-123");
 
       expect(doc).toHaveBeenCalledWith(expect.anything(), "tenant_access", "user-123");
       expect(deleteDoc).toHaveBeenCalledWith("docRef-mock");
