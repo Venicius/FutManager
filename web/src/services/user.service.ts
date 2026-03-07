@@ -4,6 +4,7 @@ import { db } from "../lib/firebase";
 export interface UserProfile {
   nome?: string;
   telefone?: string;
+  nomeGrupo?: string;
 }
 
 const COLLECTION_NAME = "users";

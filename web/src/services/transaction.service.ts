@@ -10,6 +10,7 @@ export interface Transaction {
   category: string;
   amount: number;
   date: string;
+  playerId?: string;
 }
 
 const COLLECTION_NAME = "transacoes";
@@ -20,6 +21,24 @@ const COLLECTION_NAME = "transacoes";
 export async function getTransactions(userId: string): Promise<Transaction[]> {
   const transRef = collection(db, "users", userId, COLLECTION_NAME);
   const q = query(transRef, orderBy("date", "desc"));
+  const querySnapshot = await getDocs(q);
+  
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...(doc.data() as Omit<Transaction, "id">)
+  }));
+}
+
+/**
+ * Busca transações vinculadas a um jogador específico.
+ */
+export async function getPlayerTransactions(userId: string, playerId: string): Promise<Transaction[]> {
+  const transRef = collection(db, "users", userId, COLLECTION_NAME);
+  const q = query(
+    transRef, 
+    where("playerId", "==", playerId),
+    orderBy("date", "desc")
+  );
   const querySnapshot = await getDocs(q);
   
   return querySnapshot.docs.map(doc => ({

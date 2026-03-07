@@ -189,7 +189,7 @@ export default function DashboardPendencias() {
   const [modalGerar, setModalGerar] = useState(false);
   const [selCobranca, setSelCobranca] = useState<Cobranca | null>(null);
 
-  const { activeTenantId } = useAuth();
+  const { activeTenantId, groupName } = useAuth();
 
   async function carregarDados() {
     if (!activeTenantId) return;
@@ -262,7 +262,7 @@ export default function DashboardPendencias() {
       <header className="px-4 pb-4 pt-6 md:pt-2">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">⚽ Pelada FC</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">⚽ {groupName}</h1>
             <p className="mt-0.5 text-sm text-slate-500">Mural de Pendências</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-lg shadow-sm">🔔</div>

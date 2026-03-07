@@ -53,7 +53,7 @@ function ModalNovaPartida({ aberto, onFechar, onSalvo, partidaEdit }: { aberto: 
   const [titulo, setTitulo] = useState("Pelada de Sábado");
   const [data, setData] = useState("");
   const [salvando, setSalvando] = useState(false);
-  const { activeTenantId } = useAuth();
+  const { activeTenantId, groupName } = useAuth();
 
   useEffect(() => {
     if (partidaEdit && aberto) {
@@ -61,7 +61,7 @@ function ModalNovaPartida({ aberto, onFechar, onSalvo, partidaEdit }: { aberto: 
       // slice para arrumar iso no input datetime-local
       setData(new Date(partidaEdit.data).toISOString().slice(0, 16));
     } else if (aberto) {
-      setTitulo("Pelada de Sábado");
+      setTitulo(groupName || "Pelada de Sábado");
       setData("");
     }
   }, [partidaEdit, aberto]);
@@ -106,7 +106,7 @@ function ModalNovaPartida({ aberto, onFechar, onSalvo, partidaEdit }: { aberto: 
         <form onSubmit={sub} className="flex flex-col gap-5">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-500">Título</label>
-            <input type="text" value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ex: Pelada de Sábado" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-base text-slate-900 placeholder-slate-400 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" required />
+            <input type="text" value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder={`Ex: ${groupName}`} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-base text-slate-900 placeholder-slate-400 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" required />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-500">Data e hora</label>

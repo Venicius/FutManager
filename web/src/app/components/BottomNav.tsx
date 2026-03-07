@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 
 const NAV_ITEMS = [
   { href: "/", icon: "📊", label: "Painel" },
@@ -13,6 +14,7 @@ const NAV_ITEMS = [
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const { groupName } = useAuth();
 
   return (
     <>
@@ -41,7 +43,7 @@ export default function BottomNav() {
       <nav className="hidden md:block sticky top-0 z-20 bg-white/80 backdrop-blur-xl shadow-[0_1px_12px_-4px_rgba(0,0,0,0.06)]">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-3">
           <span className="text-lg font-bold tracking-tight text-slate-900">
-            ⚽ Pelada Manager
+            ⚽ {groupName}
           </span>
           <div className="flex gap-1">
             {NAV_ITEMS.map((item) => {

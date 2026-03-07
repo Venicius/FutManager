@@ -80,7 +80,8 @@ export async function payBilling(userId: string, billingId: string, cobranca: Co
       amount: Number(valorPago),
       category: cobranca.vinculo === "Mensalista" ? "Mensalidade" : "Avulso",
       type: 'ENTRADA',
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
+      playerId: cobranca.jogadorId
     });
   } catch (error) {
     console.error("Erro em payBilling:", error);
@@ -198,4 +199,39 @@ export async function generateMatchBillings(
   }
   
   return gerados;
+}
+
+/**
+ * Busca todas as cobranças de um jogador específico, ordenadas por data de vencimento (desc).
+ */
+export async function getPlayerBillings(activeTenantId: string, playerId: string): Promise<Cobranca[]> {
+  const billsRef = collection(db, "users", activeTenantId, COLLECTION_NAME);
+  const q = query(
+    billsRef,
+    where("jogadorId", "==", playerId),
+    orderBy("dueDate", "desc")
+  );
+  
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...(doc.data() as Omit<Cobranca, "id">)
+  }));
+}
+
+/**
+ * Permite lançar dívidas ou pagamentos do passado manualmente.
+ */
+export async function addRetroactiveBilling(
+  activeTenantId: string, 
+  data: Omit<Cobranca, "id" | "vinculo"> & { vinculo?: TipoVinculo }
+): Promise<void> {
+  const billsRef = collection(db, "users", activeTenantId, COLLECTION_NAME);
+  
+  // Se vinculo não for passado, podemos assumir Mensalista ou buscar do jogador.
+  // Para simplificar a migração, o chamador deve passar ou assumimos Mensalista.
+  await addDoc(billsRef, {
+    ...data,
+    vinculo: data.vinculo || "Mensalista"
+  });
 }

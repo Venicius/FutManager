@@ -6,7 +6,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import BottomNav from "./BottomNav";
 
 function ContentWrapper({ children }: { children: React.ReactNode }) {
-  const { user, loading, signInWithGoogle, loginWithEmail, registerWithEmail, logout } = useAuth();
+  const { user, loading, signInWithGoogle, loginWithEmail, registerWithEmail, logout, groupName } = useAuth();
   
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
@@ -83,7 +83,7 @@ function ContentWrapper({ children }: { children: React.ReactNode }) {
   return (
     <>
       <header className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3 bg-white/80 backdrop-blur-md border-b border-slate-100 md:hidden">
-        <span className="text-sm font-bold text-slate-900">⚽ FutManager</span>
+        <span className="text-sm font-bold text-slate-900">⚽ {groupName}</span>
         <button onClick={logout} className="text-xs font-semibold px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">Sair da conta</button>
       </header>
       <div className="md:fixed md:top-4 md:right-4 md:z-50 hidden md:block">

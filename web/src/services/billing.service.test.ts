@@ -1,6 +1,5 @@
-
-import { generateMatchBillings, generateMonthlyBillings, payBilling } from "./billing.service";
-import { addDoc, getDocs, query, where, collection, updateDoc, doc } from "firebase/firestore";
+import { generateMatchBillings, generateMonthlyBillings, getPlayerBillings, addRetroactiveBilling, payBilling } from "./billing.service";
+import { addDoc, getDocs, query, where, collection, updateDoc, doc, orderBy } from "firebase/firestore";
 import { getPlayers } from "./player.service";
 import { addTransaction } from "./transaction.service";
 
@@ -126,6 +125,47 @@ describe("billing.service", () => {
       expect(gerados).toBe(1);
       expect(addDoc).toHaveBeenCalledWith("users/user-1/cobrancas", expect.objectContaining({
         status: "PENDENTE"
+      }));
+    });
+  });
+
+  describe("getPlayerBillings", () => {
+    it("deve buscar todas as cobranças de um jogador específico ordenadas por dueDate desc", async () => {
+      const mockDocs = [
+        { id: "b1", data: () => ({ jogadorId: "p1", dueDate: "2026-01-01", status: "PAGO" }) },
+        { id: "b2", data: () => ({ jogadorId: "p1", dueDate: "2026-02-01", status: "PENDENTE" }) },
+      ];
+      (getDocs as any).mockResolvedValue({ docs: mockDocs });
+
+      const result = await getPlayerBillings("user-1", "p1");
+
+      expect(query).toHaveBeenCalled();
+      expect(where).toHaveBeenCalledWith("jogadorId", "==", "p1");
+      expect(orderBy).toHaveBeenCalledWith("dueDate", "desc");
+      expect(result.length).toBe(2);
+      expect(result[0].id).toBe("b1");
+    });
+  });
+
+  describe("addRetroactiveBilling", () => {
+    it("deve adicionar uma cobrança manual com os dados informados", async () => {
+      const data = {
+        jogadorId: "p1",
+        nomeJogador: "Jogador Teste",
+        vinculo: "Mensalista" as any,
+        valor: 50,
+        dueDate: "2025-12-10",
+        status: "PAGO" as any,
+        referencia: "Mensalidade Dez/2025"
+      };
+
+      await addRetroactiveBilling("user-1", data);
+
+      expect(addDoc).toHaveBeenCalledWith("users/user-1/cobrancas", expect.objectContaining({
+        jogadorId: "p1",
+        valor: 50,
+        status: "PAGO",
+        referencia: "Mensalidade Dez/2025"
       }));
     });
   });

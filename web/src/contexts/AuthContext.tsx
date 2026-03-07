@@ -12,12 +12,14 @@ import {
 import { auth, db, googleProvider } from "@/lib/firebase";
 import toast from "react-hot-toast";
 import { collection, query, where, getDocs } from "firebase/firestore";
+import { getUserProfile } from "@/services/user.service";
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   activeTenantId: string | null;
   userRole: string | null;
+  groupName: string;
   signInWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   registerWithEmail: (email: string, pass: string) => Promise<void>;
@@ -31,6 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [activeTenantId, setActiveTenantId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [groupName, setGroupName] = useState<string>("Meu Grupo");
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -42,18 +45,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const q = query(accessRef, where("email", "==", currentUser.email.toLowerCase()));
           const snap = await getDocs(q);
           
+          let resolvedTenantId = currentUser.uid;
+          let resolvedRole = "owner";
+
           if (!snap.empty) {
             const docData = snap.docs[0].data();
-            setActiveTenantId(docData.ownerUid);
-            setUserRole(docData.role);
-          } else {
-            setActiveTenantId(currentUser.uid);
-            setUserRole("owner");
+            resolvedTenantId = docData.ownerUid;
+            resolvedRole = docData.role;
           }
+
+          setActiveTenantId(resolvedTenantId);
+          setUserRole(resolvedRole);
+
+          // Buscar o nome do grupo usando o tenant resolvido
+          getUserProfile(resolvedTenantId).then(profile => {
+            if (profile?.nomeGrupo) {
+              setGroupName(profile.nomeGrupo);
+            } else {
+              setGroupName("Meu Grupo");
+            }
+          });
         } catch (error) {
           console.error("Erro ao resolver tenant:", error);
           setActiveTenantId(currentUser.uid);
           setUserRole("owner");
+          setGroupName("Meu Grupo");
         }
       } else {
         setActiveTenantId(null);
@@ -131,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, activeTenantId, userRole, signInWithGoogle, loginWithEmail, registerWithEmail, logout }}>
+    <AuthContext.Provider value={{ user, loading, activeTenantId, userRole, groupName, signInWithGoogle, loginWithEmail, registerWithEmail, logout }}>
       {children}
     </AuthContext.Provider>
   );

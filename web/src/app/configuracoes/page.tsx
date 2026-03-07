@@ -21,6 +21,7 @@ export default function ConfiguracoesPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [nomeUsuario, setNomeUsuario] = useState("");
   const [telefoneUsuario, setTelefoneUsuario] = useState("");
+  const [nomeGrupo, setNomeGrupo] = useState("");
   const [salvandoPerfil, setSalvandoPerfil] = useState(false);
 
   async function carregarDados() {
@@ -36,6 +37,7 @@ export default function ConfiguracoesPage() {
       if (profileData) {
         setNomeUsuario(profileData.nome || "");
         setTelefoneUsuario(profileData.telefone || "");
+        setNomeGrupo(profileData.nomeGrupo || "");
       }
     } catch (error) {
       console.error("Erro ao carregar co-gestores:", error);
@@ -56,7 +58,11 @@ export default function ConfiguracoesPage() {
     
     try {
       await toast.promise(
-        updateUserProfile(user.uid, { nome: nomeUsuario.trim(), telefone: telefoneUsuario.replace(/\D/g, "") }),
+        updateUserProfile(user.uid, { 
+          nome: nomeUsuario.trim(), 
+          telefone: telefoneUsuario.replace(/\D/g, ""),
+          nomeGrupo: nomeGrupo.trim()
+        }),
         {
           loading: "Salvando perfil...",
           success: "Perfil atualizado com sucesso!",
@@ -147,6 +153,12 @@ export default function ConfiguracoesPage() {
                  WhatsApp / Fone
                </label>
                <input type="tel" value={telefoneUsuario} onChange={(e) => setTelefoneUsuario(e.target.value)} disabled={salvandoPerfil} required placeholder="(11) 99999-9999" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-50" />
+            </div>
+            <div>
+               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
+                 Nome do Grupo / Pelada
+               </label>
+               <input type="text" value={nomeGrupo} onChange={(e) => setNomeGrupo(e.target.value)} disabled={salvandoPerfil} required placeholder="Ex: Futebol de Quinta" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-50" />
             </div>
 
             <button type="submit" disabled={salvandoPerfil} className="mt-2 w-full rounded-xl bg-emerald-600 py-3.5 text-sm font-bold text-white shadow-md active:scale-95 transition-all disabled:opacity-50 hover:bg-emerald-700">

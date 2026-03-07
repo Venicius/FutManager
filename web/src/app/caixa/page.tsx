@@ -190,7 +190,7 @@ export default function CaixaPage() {
   const [loading, setLoading] = useState(true);
   const [exportMenuAberto, setExportMenuAberto] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
-  const { activeTenantId } = useAuth();
+  const { activeTenantId, groupName } = useAuth();
 
   async function carregar() {
     if (!activeTenantId) return;
@@ -257,7 +257,7 @@ export default function CaixaPage() {
       <header className="px-4 pb-4 pt-6 md:pt-2 flex items-start justify-between gap-3 print:hidden">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">💰 Caixa</h1>
-          <p className="mt-0.5 text-sm text-slate-500">Fluxo de caixa da pelada</p>
+          <p className="mt-0.5 text-sm text-slate-500">Fluxo de caixa de: {groupName}</p>
         </div>
 
         {/* Dropdown Exportar */}
