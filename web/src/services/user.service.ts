@@ -1,5 +1,5 @@
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { db, USERS_COLLECTION } from "../lib/firebase";
 
 export interface UserProfile {
   nome?: string;
@@ -7,7 +7,7 @@ export interface UserProfile {
   nomeGrupo?: string;
 }
 
-const COLLECTION_NAME = "users";
+const COLLECTION_NAME = USERS_COLLECTION;
 
 /**
  * Busca o perfil adicional do usuário logado (nome, telefone).

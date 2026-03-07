@@ -1,5 +1,5 @@
 import { collection, addDoc, getDocs, doc, updateDoc, query, orderBy, where } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { db, USERS_COLLECTION } from "../lib/firebase";
 
 export type TipoVinculo = "Mensalista" | "Diarista" | "Espera";
 export type StatusJogador = "Ativo" | "Inativo";
@@ -30,7 +30,7 @@ export function sanitizePhone(phone: string): string {
  */
 export async function addPlayer(userId: string, playerData: Omit<Jogador, "id">): Promise<string> {
   const sanitizedPhone = sanitizePhone(playerData.whatsapp);
-  const playersRef = collection(db, "users", userId, COLLECTION_NAME);
+  const playersRef = collection(db, USERS_COLLECTION, userId, COLLECTION_NAME);
   
   // 1. Verificar duplicidade
   const q = query(
@@ -57,7 +57,7 @@ export async function addPlayer(userId: string, playerData: Omit<Jogador, "id">)
  * @returns Array de jogadores com ID preenchido
  */
 export async function getPlayers(userId: string, vincFilter?: string): Promise<Jogador[]> {
-  const playersRef = collection(db, "users", userId, COLLECTION_NAME);
+  const playersRef = collection(db, USERS_COLLECTION, userId, COLLECTION_NAME);
   const constraints = vincFilter
     ? [where("vinculo", "==", vincFilter), orderBy("nome", "asc")]
     : [orderBy("nome", "asc")];
@@ -76,7 +76,7 @@ export async function getPlayers(userId: string, vincFilter?: string): Promise<J
  * @param id ID do documento do jogador no Firestore
  */
 export async function promotePlayerToMonthly(userId: string, id: string): Promise<void> {
-  const docRef = doc(db, "users", userId, COLLECTION_NAME, id);
+  const docRef = doc(db, USERS_COLLECTION, userId, COLLECTION_NAME, id);
   await updateDoc(docRef, { vinculo: "Mensalista" });
 }
 
@@ -90,7 +90,7 @@ export async function promotePlayerToMonthly(userId: string, id: string): Promis
  */
 export async function updatePlayer(userId: string, id: string, playerData: Partial<Omit<Jogador, "id">>): Promise<void> {
   const updates: any = { ...playerData };
-  const playersRef = collection(db, "users", userId, COLLECTION_NAME);
+  const playersRef = collection(db, USERS_COLLECTION, userId, COLLECTION_NAME);
   
   if (playerData.whatsapp) {
     const sanitizedPhone = sanitizePhone(playerData.whatsapp);
@@ -109,6 +109,6 @@ export async function updatePlayer(userId: string, id: string, playerData: Parti
     }
   }
 
-  const docRef = doc(db, "users", userId, COLLECTION_NAME, id);
+  const docRef = doc(db, USERS_COLLECTION, userId, COLLECTION_NAME, id);
   await updateDoc(docRef, updates);
 }

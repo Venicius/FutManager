@@ -9,7 +9,7 @@ import {
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut
 } from "firebase/auth";
-import { auth, db, googleProvider } from "@/lib/firebase";
+import { auth, db, googleProvider, TENANT_ACCESS_COLLECTION } from "@/lib/firebase";
 import toast from "react-hot-toast";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { getUserProfile } from "@/services/user.service";
@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [activeTenantId, setActiveTenantId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
-  const [groupName, setGroupName] = useState<string>("Meu Grupo");
+  const [groupName, setGroupName] = useState<string>("Minha Pelada");
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (currentUser && currentUser.email) {
         try {
-          const accessRef = collection(db, "tenant_access");
+          const accessRef = collection(db, TENANT_ACCESS_COLLECTION);
           const q = query(accessRef, where("email", "==", currentUser.email.toLowerCase()));
           const snap = await getDocs(q);
           
@@ -62,14 +62,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (profile?.nomeGrupo) {
               setGroupName(profile.nomeGrupo);
             } else {
-              setGroupName("Meu Grupo");
+              setGroupName("Minha Pelada");
             }
           });
         } catch (error) {
           console.error("Erro ao resolver tenant:", error);
           setActiveTenantId(currentUser.uid);
           setUserRole("owner");
-          setGroupName("Meu Grupo");
+          setGroupName("Minha Pelada");
         }
       } else {
         setActiveTenantId(null);

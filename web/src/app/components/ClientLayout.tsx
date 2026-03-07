@@ -33,6 +33,21 @@ function ContentWrapper({ children }: { children: React.ReactNode }) {
             <p className="mt-2 text-sm text-slate-500">Faça login para gerir a sua pelada</p>
           </div>
 
+          <div className="mb-6 flex p-1 bg-slate-100 rounded-2xl">
+            <button 
+              onClick={() => setIsLogin(true)}
+              className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${isLogin ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Entrar
+            </button>
+            <button 
+              onClick={() => setIsLogin(false)}
+              className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${!isLogin ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Criar Conta
+            </button>
+          </div>
+
           <form 
             onSubmit={(e) => {
               e.preventDefault();
@@ -45,19 +60,13 @@ function ContentWrapper({ children }: { children: React.ReactNode }) {
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 placeholder-slate-400" placeholder="voce@exemplo.com" />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">Palavra-passe</label>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">Senha</label>
               <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} required className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 placeholder-slate-400" placeholder="••••••••" />
             </div>
 
             <button type="submit" className="mt-2 w-full rounded-xl bg-emerald-600 py-3.5 text-sm font-bold text-white shadow-md shadow-emerald-200 active:scale-95 hover:bg-emerald-700 transition-all">
-              {isLogin ? "Entrar" : "Criar Conta"}
+              {isLogin ? "Acessar Painel" : "Cadastrar Agora"}
             </button>
-            <p className="text-center text-xs text-slate-500 mt-2">
-              {isLogin ? "Não tem uma conta?" : "Já tem conta?"}{" "}
-              <button type="button" onClick={() => setIsLogin(!isLogin)} className="font-bold text-emerald-600 hover:text-emerald-700 transition-colors">
-                 {isLogin ? "Registe-se" : "Entrar"}
-              </button>
-            </p>
           </form>
 
           <div className="relative my-6 flex items-center py-2">
