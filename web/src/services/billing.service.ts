@@ -14,7 +14,33 @@ export interface Cobranca {
   status: StatusCobranca;
   valor: number;
   referencia: string;
-  dueDate?: string;
+  dueDate?: any; // Firestore Timestamp, Date ou string ISO
+}
+
+/**
+ * Helper para converter qualquer formato de data para Date e zerar as horas.
+ */
+export function normalizeDate(dateVal: any): Date {
+  if (!dateVal) return new Date();
+  let d: Date;
+  
+  if (typeof dateVal === "string") {
+    // Trata YYYY-MM-DD ou ISO
+    if (dateVal.includes("-") && !dateVal.includes("T")) {
+      const [y, m, day] = dateVal.split("-").map(Number);
+      d = new Date(y, m - 1, day);
+    } else {
+      d = new Date(dateVal);
+    }
+  } else if (dateVal.toDate) {
+    // Firestore Timestamp
+    d = dateVal.toDate();
+  } else {
+    d = new Date(dateVal);
+  }
+
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
 const COLLECTION_NAME = "cobrancas";
@@ -30,12 +56,24 @@ export async function getPendingBillings(userId: string): Promise<Cobranca[]> {
   );
   
   const querySnapshot = await getDocs(q);
-  // Como o Firestore no plano gratuito pode limitar multi-campos em queries `in`, 
-  // trazemos e garantimos a ordenação no cliente pelo nome caso não tenha index composto pronto.
-  const cobrancas = querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...(doc.data() as Omit<Cobranca, "id">)
-  }));
+  const hoje = normalizeDate(new Date()).getTime();
+
+  const cobrancas = querySnapshot.docs.map(doc => {
+    const data = doc.data() as Omit<Cobranca, "id">;
+    let status = data.status;
+
+    // Lógica automática: Se está pendente mas venceu, visualmente é ATRASADO
+    if (status === "PENDENTE" && data.dueDate) {
+      const venc = normalizeDate(data.dueDate).getTime();
+      if (hoje > venc) status = "ATRASADO";
+    }
+
+    return {
+      id: doc.id,
+      ...data,
+      status
+    };
+  });
 
   return cobrancas.sort((a, b) => a.nomeJogador.localeCompare(b.nomeJogador));
 }
@@ -136,7 +174,7 @@ export async function generateMonthlyBillings(userId: string, amount: number, du
         status,
         valor: valorFinal,
         referencia: mesAtual,
-        dueDate
+        dueDate: normalizeDate(dueDate) // Salva como Date (Firestore salvará como Timestamp)
       });
 
       if (novoCredito !== credito) {
@@ -192,7 +230,7 @@ export async function generateMatchBillings(
         status: "PENDENTE",
         valor: amount,
         referencia: `Partida: ${matchTitle} - ${matchId}`,
-        dueDate: dueDate
+        dueDate: normalizeDate(dueDate)
       });
       gerados++;
     }
@@ -234,4 +272,87 @@ export async function addRetroactiveBilling(
     ...data,
     vinculo: data.vinculo || "Mensalista"
   });
+}
+/**
+ * Busca jogadores mensalistas ativos que não possuem pagamento confirmado no mês/ano.
+ */
+export async function getPendingPayments(userId: string, month: number, year: number): Promise<any[]> {
+  const players = await getPlayers(userId);
+  const activeMonthly = players.filter(p => p.status === "Ativo" && p.vinculo === "Mensalista");
+
+  const referencia = `${String(month).padStart(2, '0')}/${year}`;
+  const billsRef = collection(db, USERS_COLLECTION, userId, COLLECTION_NAME);
+  const q = query(billsRef, where("referencia", "==", referencia));
+  const snap = await getDocs(q);
+
+  const billsByPlayer: Record<string, Cobranca> = {};
+  snap.docs.forEach(d => {
+    const data = d.data() as Cobranca;
+    billsByPlayer[data.jogadorId] = data;
+  });
+
+  const hojeTime = normalizeDate(new Date()).getTime();
+
+  return activeMonthly
+    .filter(p => !billsByPlayer[p.id!] || billsByPlayer[p.id!].status !== "PAGO")
+    .map(p => {
+      const bill = billsByPlayer[p.id!];
+      // Se não existe cobrança, assume dia 10 do mês/ano solicitado
+      const dataVenc = bill?.dueDate ? normalizeDate(bill.dueDate) : normalizeDate(`${year}-${month}-10`);
+      
+      const vencTime = dataVenc.getTime();
+      const status = hojeTime > vencTime ? "ATRASADO" : "PENDENTE";
+
+      return { 
+        ...p, 
+        dueDate: dataVenc.toISOString(), 
+        calculatedStatus: status 
+      };
+    });
+}
+
+/**
+ * Registra o pagamento de uma mensalidade de forma rápida.
+ * Cria o registro se não existir, ou atualiza o existente.
+ */
+export async function settleMonthlyPayment(
+  userId: string, 
+  playerId: string, 
+  playerName: string, 
+  month: number, 
+  year: number,
+  amount: number
+): Promise<void> {
+  const referencia = `${String(month).padStart(2, '0')}/${year}`;
+  const billsRef = collection(db, USERS_COLLECTION, userId, COLLECTION_NAME);
+  const q = query(billsRef, where("jogadorId", "==", playerId), where("referencia", "==", referencia));
+  const snap = await getDocs(q);
+
+  if (!snap.empty) {
+    // Atualiza o primeiro encontrado que não esteja pago
+    const docId = snap.docs[0].id;
+    const cobranca = { id: docId, ...snap.docs[0].data() } as Cobranca;
+    await payBilling(userId, docId, cobranca, amount);
+  } else {
+    // Cria novo registro como PAGO
+    await addDoc(billsRef, {
+      jogadorId: playerId,
+      nomeJogador: playerName,
+      vinculo: "Mensalista",
+      status: "PAGO",
+      valor: amount,
+      referencia,
+      dueDate: normalizeDate(`${year}-${month}-10`) // Salva vencimento padrão se estiver criando na hora
+    });
+
+    // Registra no Caixa
+    await addTransaction(userId, {
+      description: `Pagamento: ${playerName} (${referencia})`,
+      amount,
+      category: "Mensalidade",
+      type: "ENTRADA",
+      date: new Date().toISOString(),
+      playerId
+    });
+  }
 }

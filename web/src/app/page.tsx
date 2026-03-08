@@ -1,20 +1,26 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getPendingBillings, payBilling, type Cobranca, type StatusCobranca } from "@/services/billing.service";
+import { getPendingBillings, payBilling, type Cobranca, type StatusCobranca, getPendingPayments, settleMonthlyPayment } from "@/services/billing.service";
 import { getDashboardMetrics, type DashboardMetrics } from "@/services/dashboard.service";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import toast from "react-hot-toast";
-import { Wallet, ArrowUpCircle, ArrowDownCircle, AlertCircle, TrendingUp } from "lucide-react";
+import { Wallet, ArrowUpCircle, ArrowDownCircle, AlertCircle, TrendingUp, CheckCircle, Calendar } from "lucide-react";
 
 // ── Helpers ────────────────────────────────────────────────
-type FiltroAba = "TODOS" | "PENDENTE" | "ATRASADO";
+type FiltroAba = "TODOS" | "PENDENTE" | "ATRASADO" | "MENSALIDADES";
 
 const ABAS: { label: string; valor: FiltroAba }[] = [
-  { label: "Todos", valor: "TODOS" },
   { label: "Pendentes", valor: "PENDENTE" },
   { label: "Atrasados", valor: "ATRASADO" },
+  { label: "Mensalidades", valor: "MENSALIDADES" },
+  { label: "Todos", valor: "TODOS" },
+];
+
+const MESES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
 
 function obterCorStatus(status: StatusCobranca) {
@@ -211,6 +217,57 @@ function ModalPagamento({ cobranca, aberto, onFechar, onConfirmar, saltando }: {
   );
 }
 
+function TabelaDevedores({ 
+  devedores, 
+  onSettle, 
+  processingId 
+}: { 
+  devedores: any[]; 
+  onSettle: (player: any) => void; 
+  processingId: string | null 
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      {devedores.map((player) => {
+        const isAtrasado = player.calculatedStatus === "ATRASADO";
+        // player.dueDate é uma string ISO enviada pelo serviço
+        const dueDate = new Date(player.dueDate);
+        
+        return (
+          <div key={player.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm border border-slate-50">
+            <div className="flex items-center gap-3">
+               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 text-slate-700 font-bold border border-slate-100 uppercase">
+                  {player.nome.charAt(0)}
+               </div>
+               <div>
+                 <p className="text-sm font-bold text-slate-900">{player.nome}</p>
+                 <div className="flex items-center gap-2 mt-0.5">
+                   <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
+                     isAtrasado ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600"
+                   }`}>
+                     {isAtrasado ? "Atrasado" : "Pendente"}
+                   </span>
+                   <span className="text-[10px] text-slate-400 font-medium">
+                     Vence: {dueDate.toLocaleDateString('pt-BR')}
+                   </span>
+                 </div>
+               </div>
+            </div>
+            <button
+              onClick={() => onSettle(player)}
+              disabled={!!processingId}
+              className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 transition-all active:scale-95 disabled:opacity-50"
+            >
+              {processingId === player.id ? "⏳" : <CheckCircle className="w-4 h-4" />}
+              Baixa
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Página Principal ───────────────────────────────────────
 export default function DashboardPendencias() {
   const [abaAtiva, setAbaAtiva] = useState<FiltroAba>("TODOS");
@@ -222,6 +279,13 @@ export default function DashboardPendencias() {
   const [selCobranca, setSelCobranca] = useState<Cobranca | null>(null);
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loadingMetrics, setLoadingMetrics] = useState(true);
+
+  // Mensalidades Reconciliation
+  const [devedores, setDevedores] = useState<any[]>([]);
+  const [mesRelatorio, setMesRelatorio] = useState(new Date().getMonth() + 1);
+  const [anoRelatorio, setAnoRelatorio] = useState(new Date().getFullYear());
+  const [loadingDevedores, setLoadingDevedores] = useState(false);
+  const [settlingId, setSettlingId] = useState<string | null>(null);
 
   const { activeTenantId, groupName } = useAuth();
 
@@ -236,6 +300,11 @@ export default function DashboardPendencias() {
       ]);
       setCobrancas(data);
       setMetrics(metricsData);
+      
+      // Carregar devedores do mês se estivermos na aba
+      if (abaAtiva === "MENSALIDADES") {
+        carregarDevedores();
+      }
     } catch (error) {
       console.error("Erro ao carregar dados do dashboard:", error);
     } finally {
@@ -244,9 +313,54 @@ export default function DashboardPendencias() {
     }
   }
 
+  async function carregarDevedores() {
+    if (!activeTenantId) return;
+    setLoadingDevedores(true);
+    try {
+      const data = await getPendingPayments(activeTenantId, mesRelatorio, anoRelatorio);
+      setDevedores(data);
+    } catch (e) {
+      console.error(e);
+      toast.error("Erro ao buscar devedores.");
+    } finally {
+      setLoadingDevedores(false);
+    }
+  }
+
   useEffect(() => {
     if (activeTenantId) carregarDados();
   }, [activeTenantId]);
+
+  useEffect(() => {
+    if (activeTenantId && abaAtiva === "MENSALIDADES") {
+      carregarDevedores();
+    }
+  }, [mesRelatorio, anoRelatorio, abaAtiva]);
+
+  async function handleSettlePayment(player: any) {
+    if (!activeTenantId || settlingId) return;
+    
+    // Valor padrão da mensalidade base
+    const amount = 50; 
+
+    setSettlingId(player.id);
+    try {
+      await toast.promise(
+        settleMonthlyPayment(activeTenantId, player.id, player.nome, mesRelatorio, anoRelatorio, amount),
+        {
+          loading: `Baixando mensalidade de ${player.nome}...`,
+          success: 'Pagamento registrado!',
+          error: 'Erro ao registrar baixa.'
+        }
+      );
+      carregarDevedores();
+      carregarDados(); // Atualiza contador e métricas
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSettlingId(null);
+    }
+  }
 
   async function handlePay(cobranca: Cobranca, valorPago: number) {
     if (payingId || !activeTenantId) return;
@@ -337,23 +451,70 @@ export default function DashboardPendencias() {
           </section>
 
           <section className="mt-5 px-4 pb-24">
-            {cobrancasFiltradas.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <span className="text-5xl">🎉</span>
-                <p className="mt-4 text-lg font-bold text-slate-900">Tudo em dia!</p>
-                <p className="mt-1 text-sm text-slate-500">Nenhuma cobrança pendente para este filtro.</p>
+            {abaAtiva === "MENSALIDADES" ? (
+              <div className="space-y-4">
+                <div className="flex flex-col md:flex-row gap-3 items-center justify-between mb-2">
+                  <h2 className="text-sm font-bold text-slate-500 uppercase flex items-center gap-2">
+                    <Calendar className="w-4 h-4" /> Devedores de {MESES[mesRelatorio - 1]}
+                  </h2>
+                  <div className="flex gap-2 w-full md:w-auto">
+                    <select 
+                      value={mesRelatorio} 
+                      onChange={(e) => setMesRelatorio(Number(e.target.value))}
+                      className="flex-1 md:flex-none rounded-xl bg-white border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-500 shadow-sm"
+                    >
+                      {MESES.map((mes, idx) => (
+                        <option key={mes} value={idx + 1}>{mes}</option>
+                      ))}
+                    </select>
+                    <select 
+                      value={anoRelatorio} 
+                      onChange={(e) => setAnoRelatorio(Number(e.target.value))}
+                      className="rounded-xl bg-white border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-500 shadow-sm"
+                    >
+                      {[2024, 2025, 2026].map(ano => (
+                        <option key={ano} value={ano}>{ano}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {loadingDevedores ? (
+                  <div className="flex flex-col items-center justify-center py-10">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-600 mb-2"></div>
+                    <p className="text-xs text-slate-500">Buscando lista...</p>
+                  </div>
+                ) : devedores.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <span className="text-5xl">✅</span>
+                    <p className="mt-4 text-lg font-bold text-slate-900">Ninguém devendo!</p>
+                    <p className="mt-1 text-sm text-slate-500">Todos os mensalistas pagaram em {MESES[mesRelatorio - 1]}.</p>
+                  </div>
+                ) : (
+                  <TabelaDevedores devedores={devedores} onSettle={handleSettlePayment} processingId={settlingId} />
+                )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {cobrancasFiltradas.map((cobranca) => (
-                  <CardCobranca 
-                    key={cobranca.id} 
-                    cobranca={cobranca} 
-                    onPay={(c) => setSelCobranca(c)}
-                    isPaying={payingId === cobranca.id}
-                  />
-                ))}
-              </div>
+              <>
+                {cobrancasFiltradas.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <span className="text-5xl">🎉</span>
+                    <p className="mt-4 text-lg font-bold text-slate-900">Tudo em dia!</p>
+                    <p className="mt-1 text-sm text-slate-500">Nenhuma cobrança pendente para este filtro.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {cobrancasFiltradas.map((cobranca) => (
+                      <CardCobranca 
+                        key={cobranca.id} 
+                        cobranca={cobranca} 
+                        onPay={(c) => setSelCobranca(c)}
+                        isPaying={payingId === cobranca.id}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </section>
         </>
