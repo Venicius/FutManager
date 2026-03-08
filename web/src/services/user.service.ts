@@ -5,6 +5,7 @@ export interface UserProfile {
   nome?: string;
   telefone?: string;
   nomeGrupo?: string;
+  mensalidadePadrao?: number;
 }
 
 const COLLECTION_NAME = USERS_COLLECTION;

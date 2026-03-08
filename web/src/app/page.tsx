@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { getPendingBillings, payBilling, type Cobranca, type StatusCobranca } from "@/services/billing.service";
+import { getDashboardMetrics, type DashboardMetrics } from "@/services/dashboard.service";
 import { useAuth } from "@/contexts/AuthContext";
 import toast from "react-hot-toast";
+import { Wallet, ArrowUpCircle, ArrowDownCircle, AlertCircle, TrendingUp } from "lucide-react";
 
 // ── Helpers ────────────────────────────────────────────────
 type FiltroAba = "TODOS" | "PENDENTE" | "ATRASADO";
@@ -31,23 +33,52 @@ function formatarMoeda(valor: number) {
 
 // ── Componentes ────────────────────────────────────────────
 
-function ResumoCards({ cobrancas }: { cobrancas: Cobranca[] }) {
-  const atrasados = cobrancas.filter((c) => c.status === "ATRASADO").length;
-  const pendentes = cobrancas.filter((c) => c.status === "PENDENTE").length;
-  const totalValor = cobrancas.reduce((acc, c) => acc + c.valor, 0);
+function MetricsCards({ metrics, loading }: { metrics: DashboardMetrics | null; loading: boolean }) {
+  if (loading || !metrics) {
+    return (
+      <div className="grid grid-cols-3 gap-3 px-4">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100" />
+        ))}
+      </div>
+    );
+  }
 
   const cards = [
-    { label: "Pendentes", count: pendentes, color: "text-amber-600", bg: "bg-amber-50" },
-    { label: "Atrasados", count: atrasados, color: "text-rose-600", bg: "bg-rose-50" },
-    { label: "A Receber", count: formatarMoeda(totalValor), color: "text-emerald-700", bg: "bg-emerald-50" },
+    { 
+      label: "Entradas", 
+      value: metrics.monthlyIncome, 
+      color: "text-emerald-600", 
+      bg: "bg-emerald-50/50", 
+      icon: <ArrowUpCircle className="w-4 h-4" /> 
+    },
+    { 
+      label: "Saídas", 
+      value: metrics.monthlyExpense, 
+      color: "text-blue-600", 
+      bg: "bg-blue-50/50", 
+      icon: <ArrowDownCircle className="w-4 h-4" /> 
+    },
+    { 
+      label: "A Receber", 
+      value: metrics.totalPending, 
+      color: "text-rose-600", 
+      bg: "bg-rose-50/50", 
+      icon: <AlertCircle className="w-4 h-4" /> 
+    },
   ];
 
   return (
     <div className="grid grid-cols-3 gap-3 px-4">
       {cards.map((card) => (
-        <div key={card.label} className={`${card.bg} rounded-2xl p-4 text-center flex flex-col justify-center items-center`}>
-          <p className={`text-lg md:text-2xl font-bold truncate w-full ${card.color}`}>{card.count}</p>
-          <p className="mt-1 text-[10px] md:text-xs font-medium text-slate-500 uppercase">{card.label}</p>
+        <div key={card.label} className={`${card.bg} rounded-2xl p-4 border border-slate-100 flex flex-col items-center justify-center text-center shadow-sm`}>
+          <div className={`${card.color} mb-1 opacity-80`}>
+            {card.icon}
+          </div>
+          <p className={`text-sm md:text-lg font-bold truncate w-full ${card.color}`}>
+            {formatarMoeda(card.value)}
+          </p>
+          <p className="mt-0.5 text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-wider">{card.label}</p>
         </div>
       ))}
     </div>
@@ -188,19 +219,27 @@ export default function DashboardPendencias() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [modalGerar, setModalGerar] = useState(false);
   const [selCobranca, setSelCobranca] = useState<Cobranca | null>(null);
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [loadingMetrics, setLoadingMetrics] = useState(true);
 
   const { activeTenantId, groupName } = useAuth();
 
   async function carregarDados() {
     if (!activeTenantId) return;
     setLoading(true);
+    setLoadingMetrics(true);
     try {
-      const data = await getPendingBillings(activeTenantId);
+      const [data, metricsData] = await Promise.all([
+        getPendingBillings(activeTenantId),
+        getDashboardMetrics(activeTenantId)
+      ]);
       setCobrancas(data);
+      setMetrics(metricsData);
     } catch (error) {
-      console.error("Erro ao carregar cobranças:", error);
+      console.error("Erro ao carregar dados do dashboard:", error);
     } finally {
       setLoading(false);
+      setLoadingMetrics(false);
     }
   }
 
@@ -285,7 +324,7 @@ export default function DashboardPendencias() {
       ) : (
         <>
           <section className="mt-2">
-            <ResumoCards cobrancas={cobrancas} />
+            <MetricsCards metrics={metrics} loading={loadingMetrics} />
           </section>
 
           <section className="mt-6">
