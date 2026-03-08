@@ -22,6 +22,7 @@ export default function ConfiguracoesPage() {
   const [nomeUsuario, setNomeUsuario] = useState("");
   const [telefoneUsuario, setTelefoneUsuario] = useState("");
   const [nomeGrupo, setNomeGrupo] = useState("");
+  const [mensalidade, setMensalidade] = useState<number>(50);
   const [salvandoPerfil, setSalvandoPerfil] = useState(false);
 
   async function carregarDados() {
@@ -30,7 +31,7 @@ export default function ConfiguracoesPage() {
     try {
       const [adminsData, profileData] = await Promise.all([
         getAdmins(activeTenantId),
-        getUserProfile(user.uid)
+        getUserProfile(activeTenantId)
       ]);
       setAdmins(adminsData);
       setProfile(profileData);
@@ -38,6 +39,7 @@ export default function ConfiguracoesPage() {
         setNomeUsuario(profileData.nome || "");
         setTelefoneUsuario(profileData.telefone || "");
         setNomeGrupo(profileData.nomeGrupo || "");
+        setMensalidade(profileData.mensalidadePadrao || 50);
       }
     } catch (error) {
       console.error("Erro ao carregar co-gestores:", error);
@@ -53,15 +55,16 @@ export default function ConfiguracoesPage() {
 
   async function handleSalvarPerfil(e: React.FormEvent) {
     if (e) e.preventDefault();
-    if (!user || salvandoPerfil) return;
+    if (!user || !activeTenantId || salvandoPerfil) return;
     setSalvandoPerfil(true);
     
     try {
       await toast.promise(
-        updateUserProfile(user.uid, { 
+        updateUserProfile(activeTenantId, { 
           nome: nomeUsuario.trim(), 
           telefone: telefoneUsuario.replace(/\D/g, ""),
-          nomeGrupo: nomeGrupo.trim()
+          nomeGrupo: nomeGrupo.trim(),
+          mensalidadePadrao: mensalidade
         }),
         {
           loading: "Salvando perfil...",
@@ -154,12 +157,18 @@ export default function ConfiguracoesPage() {
                </label>
                <input type="tel" value={telefoneUsuario} onChange={(e) => setTelefoneUsuario(e.target.value)} disabled={salvandoPerfil} required placeholder="(11) 99999-9999" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-50" />
             </div>
-            <div>
-               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-                 Nome do Grupo / Pelada
-               </label>
-               <input type="text" value={nomeGrupo} onChange={(e) => setNomeGrupo(e.target.value)} disabled={salvandoPerfil} required placeholder="Ex: Futebol de Quinta" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-50" />
-            </div>
+             <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Nome do Grupo / Pelada
+                </label>
+                <input type="text" value={nomeGrupo} onChange={(e) => setNomeGrupo(e.target.value)} disabled={salvandoPerfil} required placeholder="Ex: Futebol de Quinta" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-50" />
+             </div>
+             <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Mensalidade Padrão (R$)
+                </label>
+                <input type="number" value={mensalidade} onChange={(e) => setMensalidade(Number(e.target.value))} disabled={salvandoPerfil} required placeholder="Ex: 50" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-50" />
+             </div>
 
             <button type="submit" disabled={salvandoPerfil} className="mt-2 w-full rounded-xl bg-emerald-600 py-3.5 text-sm font-bold text-white shadow-md active:scale-95 transition-all disabled:opacity-50 hover:bg-emerald-700">
               {salvandoPerfil ? "A salvar..." : "Salvar Perfil"}
