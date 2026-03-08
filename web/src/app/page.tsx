@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { getPendingBillings, payBilling, type Cobranca, type StatusCobranca } from "@/services/billing.service";
 import { getDashboardMetrics, type DashboardMetrics } from "@/services/dashboard.service";
+import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import toast from "react-hot-toast";
 import { Wallet, ArrowUpCircle, ArrowDownCircle, AlertCircle, TrendingUp } from "lucide-react";
@@ -300,9 +301,13 @@ export default function DashboardPendencias() {
     <div className="min-h-screen">
       <header className="px-4 pb-4 pt-6 md:pt-2">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">⚽ {groupName}</h1>
-            <p className="mt-0.5 text-sm text-slate-500">Mural de Pendências</p>
+          <div className="flex items-center gap-3">
+            <Image src="/logo.png" alt="futManager Logo" width={300} height={80} className="w-auto h-10" />
+            <div className="h-8 w-[1px] bg-slate-200"></div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-slate-900 leading-none">{groupName}</h1>
+              <p className="mt-1 text-sm text-slate-500">Mural de Pendências</p>
+            </div>
           </div>
         </div>
         <div className="mt-5">

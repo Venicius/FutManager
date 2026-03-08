@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Toaster } from "react-hot-toast";
+import Image from "next/image";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import BottomNav from "./BottomNav";
 
@@ -26,10 +27,10 @@ function ContentWrapper({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
         <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl animate-slide-up">
           <div className="mb-8 text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center border-t-2 border-emerald-500 rounded-full bg-emerald-50 mb-4">
-              <span className="text-3xl">⚽</span>
+            <div className="mx-auto flex items-center justify-center mb-4">
+              <Image src="/logo.png" alt="futManager Logo" width={300} height={80} className="w-auto h-20" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">FutManager</h1>
+            <h1 className="sr-only">FutManager</h1>
             <p className="mt-2 text-sm text-slate-500">Faça login para gerir a sua pelada</p>
           </div>
 
@@ -91,8 +92,12 @@ function ContentWrapper({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3 bg-white/80 backdrop-blur-md border-b border-slate-100 md:hidden">
-        <span className="text-sm font-bold text-slate-900">⚽ {groupName}</span>
+      <header className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-2 bg-white/80 backdrop-blur-md border-b border-slate-100 md:hidden">
+        <div className="flex items-center gap-2">
+          <Image src="/logo.png" alt="futManager Logo" width={240} height={64} className="w-auto h-8" />
+          <span className="text-xs font-medium text-slate-400">|</span>
+          <span className="text-sm font-bold text-slate-900 truncate max-w-[150px]">{groupName}</span>
+        </div>
         <button onClick={logout} className="text-xs font-semibold px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">Sair da conta</button>
       </header>
       <div className="md:fixed md:top-4 md:right-4 md:z-50 hidden md:block">
