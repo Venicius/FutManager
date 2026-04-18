@@ -1,21 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getPendingBillings, payBilling, type Cobranca, type StatusCobranca, getPendingPayments, settleMonthlyPayment, gerarMensalidadesParaGrupo } from "@/services/billing.service";
+import { getPendingPayments, getPaidPayments, settleMonthlyPayment, gerarMensalidadesParaGrupo } from "@/services/billing.service";
 import { getDashboardMetrics, type DashboardMetrics } from "@/services/dashboard.service";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import toast from "react-hot-toast";
-import { Wallet, ArrowUpCircle, ArrowDownCircle, AlertCircle, TrendingUp, CheckCircle, Calendar } from "lucide-react";
+import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Calendar } from "lucide-react";
 
 // ── Helpers ────────────────────────────────────────────────
-type FiltroAba = "pendente" | "atrasado" | "MENSALIDADES" | "TODOS";
+type FiltroAba = "PENDENTES" | "PAGOS";
 
 const ABAS: { label: string; valor: FiltroAba }[] = [
-  { label: "Pendentes", valor: "pendente" },
-  { label: "Atrasados", valor: "atrasado" },
-  { label: "Mensalidades", valor: "MENSALIDADES" },
-  { label: "Todos", valor: "TODOS" },
+  { label: "Pendentes", valor: "PENDENTES" },
+  { label: "Pagos ✓", valor: "PAGOS" },
 ];
 
 const MESES = [
@@ -23,16 +21,7 @@ const MESES = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
 
-function obterCorStatus(status: StatusCobranca) {
-  switch (status) {
-    case "pago":
-      return { badge: "bg-emerald-50 text-emerald-700", icon: "✓", border: "border-l-emerald-500" };
-    case "atrasado":
-      return { badge: "bg-rose-50 text-rose-600", icon: "!", border: "border-l-rose-400" };
-    case "pendente":
-      return { badge: "bg-amber-50 text-amber-600", icon: "⏳", border: "border-l-amber-400" };
-  }
-}
+
 
 function formatarMoeda(valor: number) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -92,7 +81,8 @@ function MetricsCards({ metrics, loading }: { metrics: DashboardMetrics | null; 
   );
 }
 
-function BarraAbas({ abaAtiva, onChange }: { abaAtiva: FiltroAba; onChange: (aba: FiltroAba) => void }) {
+function BarraAbas({ abaAtiva, onChange, countPendentes, countPagos }: { abaAtiva: FiltroAba; onChange: (aba: FiltroAba) => void; countPendentes: number; countPagos: number }) {
+  const counts: Record<FiltroAba, number> = { PENDENTES: countPendentes, PAGOS: countPagos };
   return (
     <div className="flex gap-2 px-4">
       {ABAS.map((aba) => {
@@ -108,6 +98,13 @@ function BarraAbas({ abaAtiva, onChange }: { abaAtiva: FiltroAba; onChange: (aba
             }`}
           >
             {aba.label}
+            {counts[aba.valor] > 0 && (
+              <span className={`ml-1.5 inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                ativo ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+              }`}>
+                {counts[aba.valor]}
+              </span>
+            )}
           </button>
         );
       })}
@@ -115,35 +112,35 @@ function BarraAbas({ abaAtiva, onChange }: { abaAtiva: FiltroAba; onChange: (aba
   );
 }
 
-function CardCobranca({ cobranca, onPay, isPaying }: { cobranca: Cobranca; onPay: (c: Cobranca) => void; isPaying: boolean }) {
-  const cor = obterCorStatus(cobranca.status);
-  const podePagar = cobranca.status === "pendente" || cobranca.status === "atrasado";
-
+function TabelaPagos({ pagos }: { pagos: any[] }) {
   return (
-    <div className={`flex items-center gap-3 rounded-2xl border-l-4 ${cor.border} bg-white p-4 shadow-sm transition-all active:scale-[0.98]`}>
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-50 text-base font-bold text-slate-700 border border-slate-100">
-        {cobranca.nomeJogador.charAt(0).toUpperCase()}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="truncate text-sm font-bold text-slate-900">{cobranca.nomeJogador}</p>
-        <p className="mt-0.5 text-xs text-slate-500">{cobranca.vinculo} · {cobranca.referencia}</p>
-        <div className="mt-1.5 flex items-center gap-2">
-          <p className="text-sm font-bold text-slate-900">{formatarMoeda(cobranca.valor)}</p>
-          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase ${cor.badge}`}>
-            {cobranca.status}
-          </span>
-        </div>
-      </div>
-      {podePagar && (
-        <button 
-          onClick={() => onPay(cobranca)}
-          disabled={isPaying}
-          className="ml-2 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-all active:scale-90 disabled:opacity-50 disabled:scale-100"
-          aria-label="Registrar Pagamento"
-        >
-          {isPaying ? "⏳" : "✓"}
-        </button>
-      )}
+    <div className="flex flex-col gap-3">
+      {pagos.map((player) => {
+        const dataPag = player.dataPagamento ? new Date(player.dataPagamento) : null;
+        return (
+          <div key={player.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm border-l-4 border-l-emerald-500 border border-slate-50">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-100 uppercase">
+                {player.nome.charAt(0)}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-900">{player.nome}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-emerald-50 text-emerald-700">
+                    ✓ Pago
+                  </span>
+                  {dataPag && (
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      em {dataPag.toLocaleDateString('pt-BR')}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <p className="text-sm font-bold text-emerald-700">{formatarMoeda(player.valor)}</p>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -186,41 +183,7 @@ function ModalGerarMensalidades({ aberto, onFechar, onConfirmar, isGenerating }:
   );
 }
 
-function ModalPagamento({ cobranca, aberto, onFechar, onConfirmar, saltando }: { cobranca: Cobranca | null; aberto: boolean; onFechar: () => void; onConfirmar: (valor: number) => void; saltando: boolean }) {
-  const [valor, setValor] = useState(0);
 
-  useEffect(() => {
-    if (cobranca) setValor(cobranca.valor);
-  }, [cobranca]);
-
-  if (!aberto || !cobranca) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onFechar} />
-      <div className="relative w-full max-w-sm animate-slide-up rounded-t-3xl md:rounded-3xl bg-white px-5 pb-10 pt-6 md:mx-4">
-        <h2 className="mb-4 text-xl font-bold text-slate-900">Registrar Pagamento</h2>
-        <p className="mb-4 text-sm text-slate-500">Quanto {cobranca.nomeJogador} está pagando hoje?</p>
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-slate-500 uppercase">Valor Pago (R$)</label>
-            <input type="number" autoFocus value={valor} onChange={(e) => setValor(Number(e.target.value))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-lg font-bold text-emerald-700 outline-none focus:border-emerald-500" />
-          </div>
-          <div className="flex gap-3">
-             <button onClick={onFechar} className="flex-1 rounded-xl border border-slate-200 py-3.5 text-sm font-semibold text-slate-500">Cancelar</button>
-             <button
-               disabled={valor <= 0 || saltando}
-               onClick={() => onConfirmar(valor)}
-               className="flex-1 rounded-xl bg-emerald-600 py-3.5 text-sm font-bold text-white shadow-md active:scale-95 disabled:opacity-50"
-             >
-               {saltando ? "⏳" : "Confirmar"}
-             </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function TabelaDevedores({ 
   devedores, 
@@ -275,21 +238,20 @@ function TabelaDevedores({
 
 // ── Página Principal ───────────────────────────────────────
 export default function DashboardPendencias() {
-  const [abaAtiva, setAbaAtiva] = useState<FiltroAba>("pendente");
-  const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
+  const [abaAtiva, setAbaAtiva] = useState<FiltroAba>("PENDENTES");
   const [loading, setLoading] = useState(true);
-  const [payingId, setPayingId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [modalGerar, setModalGerar] = useState(false);
-  const [selCobranca, setSelCobranca] = useState<Cobranca | null>(null);
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loadingMetrics, setLoadingMetrics] = useState(true);
 
   // Mensalidades Reconciliation
   const [devedores, setDevedores] = useState<any[]>([]);
+  const [pagos, setPagos] = useState<any[]>([]);
   const [mesRelatorio, setMesRelatorio] = useState(new Date().getMonth() + 1);
   const [anoRelatorio, setAnoRelatorio] = useState(new Date().getFullYear());
   const [loadingDevedores, setLoadingDevedores] = useState(false);
+  const [loadingPagos, setLoadingPagos] = useState(false);
   const [settlingId, setSettlingId] = useState<string | null>(null);
 
   const { activeTenantId, groupName } = useAuth();
@@ -299,17 +261,12 @@ export default function DashboardPendencias() {
     setLoading(true);
     setLoadingMetrics(true);
     try {
-      const [data, metricsData] = await Promise.all([
-        getPendingBillings(activeTenantId),
-        getDashboardMetrics(activeTenantId)
-      ]);
-      setCobrancas(data);
+      const metricsData = await getDashboardMetrics(activeTenantId);
       setMetrics(metricsData);
       
-      // Carregar devedores do mês se estivermos na aba
-      if (abaAtiva === "MENSALIDADES") {
-        carregarDevedores();
-      }
+      // Carregar listas do mês
+      carregarDevedores();
+      carregarPagos();
     } catch (error) {
       console.error("Erro ao carregar dados do dashboard:", error);
     } finally {
@@ -332,15 +289,29 @@ export default function DashboardPendencias() {
     }
   }
 
+  async function carregarPagos() {
+    if (!activeTenantId) return;
+    setLoadingPagos(true);
+    try {
+      const data = await getPaidPayments(activeTenantId, mesRelatorio, anoRelatorio);
+      setPagos(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingPagos(false);
+    }
+  }
+
   useEffect(() => {
     if (activeTenantId) carregarDados();
   }, [activeTenantId]);
 
   useEffect(() => {
-    if (activeTenantId && abaAtiva === "MENSALIDADES") {
+    if (activeTenantId) {
       carregarDevedores();
+      carregarPagos();
     }
-  }, [mesRelatorio, anoRelatorio, abaAtiva]);
+  }, [mesRelatorio, anoRelatorio]);
 
   async function handleSettlePayment(player: any) {
     if (!activeTenantId || settlingId) return;
@@ -367,30 +338,6 @@ export default function DashboardPendencias() {
     }
   }
 
-  async function handlePay(cobranca: Cobranca, valorPago: number) {
-    if (payingId || !activeTenantId) return;
-    
-    setPayingId(cobranca.id!);
-    try {
-      await toast.promise(
-        payBilling(activeTenantId, cobranca.id!, cobranca, valorPago),
-        {
-          loading: 'A registar pagamento...',
-          success: 'Pagamento registado com sucesso!',
-          error: 'Erro ao processar pagamento.',
-        }
-      );
-      
-      setSelCobranca(null);
-      carregarDados();
-      
-    } catch (error) {
-      console.error("Erro ao registrar pagamento:", error);
-    } finally {
-      setPayingId(null);
-    }
-  }
-
   async function handleGenerate(valor: number, vencimento: string, periodo: string) {
     if (isGenerating || !activeTenantId) return;
     setIsGenerating(true);
@@ -412,11 +359,6 @@ export default function DashboardPendencias() {
       setIsGenerating(false);
     }
   }
-
-  const cobrancasFiltradas =
-    abaAtiva === "TODOS"
-      ? cobrancas
-      : cobrancas.filter((c) => c.status === abaAtiva);
 
   return (
     <div className="min-h-screen">
@@ -454,38 +396,39 @@ export default function DashboardPendencias() {
           </section>
 
           <section className="mt-6">
-            <BarraAbas abaAtiva={abaAtiva} onChange={setAbaAtiva} />
+            <BarraAbas abaAtiva={abaAtiva} onChange={setAbaAtiva} countPendentes={devedores.length} countPagos={pagos.length} />
           </section>
 
           <section className="mt-5 px-4 pb-24">
-            {abaAtiva === "MENSALIDADES" ? (
-              <div className="space-y-4">
-                <div className="flex flex-col md:flex-row gap-3 items-center justify-between mb-2">
-                  <h2 className="text-sm font-bold text-slate-500 uppercase flex items-center gap-2">
-                    <Calendar className="w-4 h-4" /> Devedores de {MESES[mesRelatorio - 1]}
-                  </h2>
-                  <div className="flex gap-2 w-full md:w-auto">
-                    <select 
-                      value={mesRelatorio} 
-                      onChange={(e) => setMesRelatorio(Number(e.target.value))}
-                      className="flex-1 md:flex-none rounded-xl bg-white border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-500 shadow-sm"
-                    >
-                      {MESES.map((mes, idx) => (
-                        <option key={mes} value={idx + 1}>{mes}</option>
-                      ))}
-                    </select>
-                    <select 
-                      value={anoRelatorio} 
-                      onChange={(e) => setAnoRelatorio(Number(e.target.value))}
-                      className="rounded-xl bg-white border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-500 shadow-sm"
-                    >
-                      {[2024, 2025, 2026].map(ano => (
-                        <option key={ano} value={ano}>{ano}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+            {/* Seletor de Mês/Ano — compartilhado pelas duas abas */}
+            <div className="flex flex-col md:flex-row gap-3 items-center justify-between mb-4">
+              <h2 className="text-sm font-bold text-slate-500 uppercase flex items-center gap-2">
+                <Calendar className="w-4 h-4" /> {MESES[mesRelatorio - 1]} / {anoRelatorio}
+              </h2>
+              <div className="flex gap-2 w-full md:w-auto">
+                <select 
+                  value={mesRelatorio} 
+                  onChange={(e) => setMesRelatorio(Number(e.target.value))}
+                  className="flex-1 md:flex-none rounded-xl bg-white border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-500 shadow-sm"
+                >
+                  {MESES.map((mes, idx) => (
+                    <option key={mes} value={idx + 1}>{mes}</option>
+                  ))}
+                </select>
+                <select 
+                  value={anoRelatorio} 
+                  onChange={(e) => setAnoRelatorio(Number(e.target.value))}
+                  className="rounded-xl bg-white border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-500 shadow-sm"
+                >
+                  {[2024, 2025, 2026].map(ano => (
+                    <option key={ano} value={ano}>{ano}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
+            {abaAtiva === "PENDENTES" ? (
+              <div className="space-y-4">
                 {loadingDevedores ? (
                   <div className="flex flex-col items-center justify-center py-10">
                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-600 mb-2"></div>
@@ -502,33 +445,28 @@ export default function DashboardPendencias() {
                 )}
               </div>
             ) : (
-              <>
-                {cobrancasFiltradas.length === 0 ? (
+              <div className="space-y-4">
+                {loadingPagos ? (
+                  <div className="flex flex-col items-center justify-center py-10">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-600 mb-2"></div>
+                    <p className="text-xs text-slate-500">Buscando pagos...</p>
+                  </div>
+                ) : pagos.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-center">
-                    <span className="text-5xl">🎉</span>
-                    <p className="mt-4 text-lg font-bold text-slate-900">Tudo em dia!</p>
-                    <p className="mt-1 text-sm text-slate-500">Nenhuma cobrança pendente para este filtro.</p>
+                    <span className="text-5xl">💤</span>
+                    <p className="mt-4 text-lg font-bold text-slate-900">Nenhum pagamento registrado</p>
+                    <p className="mt-1 text-sm text-slate-500">Nenhum mensalista pagou em {MESES[mesRelatorio - 1]} ainda.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {cobrancasFiltradas.map((cobranca) => (
-                      <CardCobranca 
-                        key={cobranca.id} 
-                        cobranca={cobranca} 
-                        onPay={(c) => setSelCobranca(c)}
-                        isPaying={payingId === cobranca.id}
-                      />
-                    ))}
-                  </div>
+                  <TabelaPagos pagos={pagos} />
                 )}
-              </>
+              </div>
             )}
           </section>
         </>
       )}
 
       <ModalGerarMensalidades aberto={modalGerar} onFechar={() => setModalGerar(false)} onConfirmar={handleGenerate} isGenerating={isGenerating} />
-      <ModalPagamento cobranca={selCobranca} aberto={!!selCobranca} onFechar={() => setSelCobranca(null)} onConfirmar={(v) => handlePay(selCobranca!, v)} saltando={!!payingId} />
     </div>
   );
 }

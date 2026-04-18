@@ -343,6 +343,39 @@ export async function getPendingPayments(userId: string, month: number, year: nu
 }
 
 /**
+ * Busca jogadores mensalistas que já pagaram no mês/ano especificado.
+ */
+export async function getPaidPayments(userId: string, month: number, year: number): Promise<any[]> {
+  const players = await getPlayers(userId);
+  const activeMonthly = players.filter(p => p.vinculo === "Mensalista");
+
+  const periodo = `${year}-${String(month).padStart(2, '0')}`;
+  const billsRef = collection(db, USERS_COLLECTION, userId, COLLECTION_NAME);
+  const q = query(billsRef, where("periodo", "==", periodo), where("status", "==", "pago"));
+  const snap = await getDocs(q);
+
+  const paidBills: Record<string, Cobranca> = {};
+  snap.docs.forEach(d => {
+    const data = d.data() as Cobranca;
+    paidBills[data.jogadorId] = { id: d.id, ...data };
+  });
+
+  return activeMonthly
+    .filter(p => p.id && paidBills[p.id])
+    .map(p => {
+      const bill = paidBills[p.id!];
+      const dataPag = bill.dataPagamento ? normalizeDate(bill.dataPagamento) : null;
+      return {
+        ...p,
+        valor: bill.valor,
+        dataPagamento: dataPag ? dataPag.toISOString() : null,
+      };
+    })
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
+
+/**
  * Registra o pagamento de uma mensalidade de forma rápida.
  * Cria o registro se não existir, ou atualiza o existente.
  */
