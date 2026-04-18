@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getPendingBillings, payBilling, type Cobranca, type StatusCobranca, getPendingPayments, settleMonthlyPayment } from "@/services/billing.service";
+import { getPendingBillings, payBilling, type Cobranca, type StatusCobranca, getPendingPayments, settleMonthlyPayment, gerarMensalidadesParaGrupo } from "@/services/billing.service";
 import { getDashboardMetrics, type DashboardMetrics } from "@/services/dashboard.service";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,11 +9,11 @@ import toast from "react-hot-toast";
 import { Wallet, ArrowUpCircle, ArrowDownCircle, AlertCircle, TrendingUp, CheckCircle, Calendar } from "lucide-react";
 
 // ── Helpers ────────────────────────────────────────────────
-type FiltroAba = "TODOS" | "PENDENTE" | "ATRASADO" | "MENSALIDADES";
+type FiltroAba = "pendente" | "atrasado" | "MENSALIDADES" | "TODOS";
 
 const ABAS: { label: string; valor: FiltroAba }[] = [
-  { label: "Pendentes", valor: "PENDENTE" },
-  { label: "Atrasados", valor: "ATRASADO" },
+  { label: "Pendentes", valor: "pendente" },
+  { label: "Atrasados", valor: "atrasado" },
   { label: "Mensalidades", valor: "MENSALIDADES" },
   { label: "Todos", valor: "TODOS" },
 ];
@@ -25,11 +25,11 @@ const MESES = [
 
 function obterCorStatus(status: StatusCobranca) {
   switch (status) {
-    case "PAGO":
+    case "pago":
       return { badge: "bg-emerald-50 text-emerald-700", icon: "✓", border: "border-l-emerald-500" };
-    case "ATRASADO":
+    case "atrasado":
       return { badge: "bg-rose-50 text-rose-600", icon: "!", border: "border-l-rose-400" };
-    case "PENDENTE":
+    case "pendente":
       return { badge: "bg-amber-50 text-amber-600", icon: "⏳", border: "border-l-amber-400" };
   }
 }
@@ -117,7 +117,7 @@ function BarraAbas({ abaAtiva, onChange }: { abaAtiva: FiltroAba; onChange: (aba
 
 function CardCobranca({ cobranca, onPay, isPaying }: { cobranca: Cobranca; onPay: (c: Cobranca) => void; isPaying: boolean }) {
   const cor = obterCorStatus(cobranca.status);
-  const podePagar = cobranca.status === "PENDENTE" || cobranca.status === "ATRASADO";
+  const podePagar = cobranca.status === "pendente" || cobranca.status === "atrasado";
 
   return (
     <div className={`flex items-center gap-3 rounded-2xl border-l-4 ${cor.border} bg-white p-4 shadow-sm transition-all active:scale-[0.98]`}>
@@ -148,9 +148,10 @@ function CardCobranca({ cobranca, onPay, isPaying }: { cobranca: Cobranca; onPay
   );
 }
 
-function ModalGerarMensalidades({ aberto, onFechar, onConfirmar, isGenerating }: { aberto: boolean; onFechar: () => void; onConfirmar: (valor: number, vencimento: string) => void; isGenerating: boolean }) {
+function ModalGerarMensalidades({ aberto, onFechar, onConfirmar, isGenerating }: { aberto: boolean; onFechar: () => void; onConfirmar: (valor: number, vencimento: string, periodo: string) => void; isGenerating: boolean }) {
   const [valor, setValor] = useState(50);
   const [vencimento, setVencimento] = useState("");
+  const [periodo, setPeriodo] = useState(new Date().toISOString().substring(0, 7)); // YYYY-MM
 
   if (!aberto) return null;
 
@@ -165,15 +166,19 @@ function ModalGerarMensalidades({ aberto, onFechar, onConfirmar, isGenerating }:
             <input type="number" value={valor} onChange={(e) => setValor(Number(e.target.value))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-500" />
           </div>
           <div>
+            <label className="mb-1.5 block text-xs font-semibold text-slate-500 uppercase">Período (Mês/Ano)</label>
+            <input type="month" value={periodo} onChange={(e) => setPeriodo(e.target.value)} required className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-500" />
+          </div>
+          <div>
             <label className="mb-1.5 block text-xs font-semibold text-slate-500 uppercase">Data de Vencimento</label>
             <input type="date" value={vencimento} onChange={(e) => setVencimento(e.target.value)} required className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-500" />
           </div>
           <button 
-            disabled={!vencimento || isGenerating}
-            onClick={() => onConfirmar(valor, vencimento)}
+            disabled={!vencimento || !periodo || isGenerating}
+            onClick={() => onConfirmar(valor, vencimento, periodo)}
             className="w-full rounded-xl bg-emerald-600 py-4 text-sm font-bold text-white shadow-md active:scale-95 disabled:opacity-50"
           >
-            {isGenerating ? "A gerar..." : "Gerar Agora"}
+            {isGenerating ? "Processando Lote..." : "Lançar Mensalidades"}
           </button>
         </div>
       </div>
@@ -229,9 +234,9 @@ function TabelaDevedores({
   return (
     <div className="flex flex-col gap-3">
       {devedores.map((player) => {
-        const isAtrasado = player.calculatedStatus === "ATRASADO";
-        // player.dueDate é uma string ISO enviada pelo serviço
-        const dueDate = new Date(player.dueDate);
+        const isAtrasado = player.calculatedStatus === "atrasado";
+        // player.dataVencimento vem como string ISO para o UI
+        const dataVenc = new Date(player.dataVencimento);
         
         return (
           <div key={player.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm border border-slate-50">
@@ -248,7 +253,7 @@ function TabelaDevedores({
                      {isAtrasado ? "Atrasado" : "Pendente"}
                    </span>
                    <span className="text-[10px] text-slate-400 font-medium">
-                     Vence: {dueDate.toLocaleDateString('pt-BR')}
+                     Vence: {dataVenc.toLocaleDateString('pt-BR')}
                    </span>
                  </div>
                </div>
@@ -270,7 +275,7 @@ function TabelaDevedores({
 
 // ── Página Principal ───────────────────────────────────────
 export default function DashboardPendencias() {
-  const [abaAtiva, setAbaAtiva] = useState<FiltroAba>("TODOS");
+  const [abaAtiva, setAbaAtiva] = useState<FiltroAba>("pendente");
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
   const [loading, setLoading] = useState(true);
   const [payingId, setPayingId] = useState<string | null>(null);
@@ -386,21 +391,23 @@ export default function DashboardPendencias() {
     }
   }
 
-  async function handleGenerate(valor: number, vencimento: string) {
+  async function handleGenerate(valor: number, vencimento: string, periodo: string) {
     if (isGenerating || !activeTenantId) return;
     setIsGenerating(true);
     try {
-      const gerados = await import("@/services/billing.service").then(m => m.generateMonthlyBillings(activeTenantId, valor, vencimento));
+      const vDate = new Date(vencimento + "T12:00:00"); // Garante meio-dia para evitar timezone shift no Date
+      const gerados = await gerarMensalidadesParaGrupo(activeTenantId, periodo, vDate, valor);
+      
       if (gerados > 0) {
-        toast.success(`Foram geradas ${gerados} novas mensalidades!`);
+        toast.success(`Sucesso! ${gerados} mensalidades lançadas.`);
         setModalGerar(false);
         carregarDados();
       } else {
-        toast.success("Nenhuma mensalidade nova precisou ser gerada.");
+        toast.success("Nenhuma mensalidade nova gerada (possível duplicidade).");
       }
     } catch (e) {
       console.error(e);
-      toast.error("Erro ao gerar mensalidades.");
+      toast.error("Erro no motor de faturamento.");
     } finally {
       setIsGenerating(false);
     }

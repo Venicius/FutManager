@@ -16,13 +16,13 @@ export async function getDashboardMetrics(activeTenantId: string): Promise<Dashb
   const primeiroDiaMes = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
   // 1. Buscar transações e cobranças pendentes
-  const billsRef = collection(db, USERS_COLLECTION, activeTenantId, "cobrancas");
+  const billsRef = collection(db, USERS_COLLECTION, activeTenantId, "mensalidades");
   
   const [transactions, billsSnap] = await Promise.all([
     getTransactions(activeTenantId),
     getDocs(query(
       billsRef, 
-      where("status", "in", ["PENDENTE", "ATRASADO"])
+      where("status", "in", ["pendente", "atrasado"])
     ))
   ]);
 

@@ -3,7 +3,7 @@ import { db, USERS_COLLECTION } from "../lib/firebase";
 import { addTransaction } from "./transaction.service";
 import { getPlayers } from "./player.service";
 
-export type StatusCobranca = "PAGO" | "PENDENTE" | "ATRASADO";
+export type StatusCobranca = "pago" | "pendente" | "atrasado";
 export type TipoVinculo = "Mensalista" | "Diarista" | "Convidado";
 
 export interface Cobranca {
@@ -13,8 +13,10 @@ export interface Cobranca {
   vinculo: TipoVinculo;
   status: StatusCobranca;
   valor: number;
-  referencia: string;
-  dueDate?: any; // Firestore Timestamp, Date ou string ISO
+  periodo: string; // Formato YYYY-MM
+  referencia: string; // Mantido para compatibilidade em listagens (converte de periodo ou ex: "Partida X")
+  dataVencimento: any; // Firestore Timestamp ou Date
+  dataPagamento?: any; // Firestore Timestamp ou Date
 }
 
 /**
@@ -43,7 +45,7 @@ export function normalizeDate(dateVal: any): Date {
   return d;
 }
 
-const COLLECTION_NAME = "cobrancas";
+const COLLECTION_NAME = "mensalidades";
 
 /**
  * Busca todas as cobranças que ainda não foram pagas (Pendente ou Atrasado).
@@ -52,7 +54,7 @@ export async function getPendingBillings(userId: string): Promise<Cobranca[]> {
   const billsRef = collection(db, USERS_COLLECTION, userId, COLLECTION_NAME);
   const q = query(
     billsRef,
-    where("status", "in", ["PENDENTE", "ATRASADO"])
+    where("status", "in", ["pendente", "atrasado"])
   );
   
   const querySnapshot = await getDocs(q);
@@ -62,10 +64,9 @@ export async function getPendingBillings(userId: string): Promise<Cobranca[]> {
     const data = doc.data() as Omit<Cobranca, "id">;
     let status = data.status;
 
-    // Lógica automática: Se está pendente mas venceu, visualmente é ATRASADO
-    if (status === "PENDENTE" && data.dueDate) {
-      const venc = normalizeDate(data.dueDate).getTime();
-      if (hoje > venc) status = "ATRASADO";
+    if (status === "pendente" && data.dataVencimento) {
+      const venc = normalizeDate(data.dataVencimento).getTime();
+      if (hoje > venc) status = "atrasado";
     }
 
     return {
@@ -91,11 +92,12 @@ export async function payBilling(userId: string, billingId: string, cobranca: Co
     const docRef = doc(db, USERS_COLLECTION, userId, COLLECTION_NAME, billingId);
 
     if (diferenca >= 0) {
-      // Pagamento total ou a maior
-      await updateDoc(docRef, { status: 'PAGO' });
+      await updateDoc(docRef, { 
+        status: 'pago',
+        dataPagamento: new Date()
+      });
 
       if (diferenca > 0) {
-        // Lançar crédito para o jogador
         const jogadores = await getPlayers(userId);
         const jogador = jogadores.find(j => j.id === cobranca.jogadorId);
         if (jogador) {
@@ -106,15 +108,13 @@ export async function payBilling(userId: string, billingId: string, cobranca: Co
         }
       }
     } else {
-      // Pagamento parcial
       await updateDoc(docRef, {
         valor: cobranca.valor - valorPago
       });
     }
 
-    // 2. Registrar no Caixa (Transação Automática com valor REAL pago)
     await addTransaction(userId, {
-      description: 'Pagamento: ' + cobranca.nomeJogador + ' (' + cobranca.referencia + ')',
+      description: 'Pagamento: ' + cobranca.nomeJogador + ' (' + (cobranca.periodo || cobranca.referencia) + ')',
       amount: Number(valorPago),
       category: cobranca.vinculo === "Mensalista" ? "Mensalidade" : "Avulso",
       type: 'ENTRADA',
@@ -131,12 +131,27 @@ export async function payBilling(userId: string, billingId: string, cobranca: Co
  * Gera as cobranças do mês para todos os jogadores Mensalistas ativos.
  * Aplica abatimento automático de créditos acumulados.
  */
-export async function generateMonthlyBillings(userId: string, amount: number, dueDate: string): Promise<number> {
+/**
+ * Motor de Faturamento (Billing Engine): Lançamento em massa.
+ * Cobre a lógica de idempotência, saldo de crédito e status automático.
+ * 
+ * @param userId ID do Tenant
+ * @param periodo Formato YYYY-MM
+ * @param dataVencimento Objeto Date (será normalizado)
+ * @param valor Valor da mensalidade para este lote
+ */
+export async function gerarMensalidadesParaGrupo(
+  userId: string, 
+  periodo: string, 
+  dataVencimento: Date, 
+  valor: number
+): Promise<number> {
   const jogadores = await getPlayers(userId);
   const mensalistasAtivos = jogadores.filter(j => j.vinculo === "Mensalista" && j.status === "Ativo");
 
-  const now = new Date();
-  const mesAtual = `${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+  const normalizedVenc = normalizeDate(dataVencimento);
+  const hoje = normalizeDate(new Date()).getTime();
+  const vencTime = normalizedVenc.getTime();
 
   let gerados = 0;
 
@@ -147,23 +162,26 @@ export async function generateMonthlyBillings(userId: string, amount: number, du
     const q = query(
       billsRef,
       where("jogadorId", "==", jogador.id),
-      where("referencia", "==", mesAtual)
+      where("periodo", "==", periodo)
     );
     const snap = await getDocs(q);
 
+    // Idempotência: Se já existe registro para esse período, pula
     if (snap.empty) {
       const credito = jogador.creditoAcumulado || 0;
-      let status: StatusCobranca = "PENDENTE";
-      let valorFinal = amount;
+      let status: StatusCobranca = hoje > vencTime ? "atrasado" : "pendente";
+      let valorFinal = valor;
+      let dataPagamento: any = null;
       let novoCredito = credito;
 
-      if (credito >= amount) {
-        status = "PAGO";
-        valorFinal = amount;
-        novoCredito = credito - amount;
+      // Lógica de abatimento automático de crédito
+      if (credito >= valor) {
+        status = "pago";
+        valorFinal = valor;
+        novoCredito = credito - valor;
+        dataPagamento = new Date();
       } else if (credito > 0) {
-        status = "PENDENTE";
-        valorFinal = amount - credito;
+        valorFinal = valor - credito;
         novoCredito = 0;
       }
 
@@ -173,8 +191,10 @@ export async function generateMonthlyBillings(userId: string, amount: number, du
         vinculo: "Mensalista",
         status,
         valor: valorFinal,
-        referencia: mesAtual,
-        dueDate: normalizeDate(dueDate) // Salva como Date (Firestore salvará como Timestamp)
+        periodo,
+        referencia: `${periodo.split("-")[1]}/${periodo.split("-")[0]}`,
+        dataVencimento: normalizedVenc,
+        dataPagamento
       });
 
       if (novoCredito !== credito) {
@@ -182,9 +202,17 @@ export async function generateMonthlyBillings(userId: string, amount: number, du
         await updateDoc(jogadorRef, { creditoAcumulado: novoCredito });
       }
 
-      // Se foi pago via crédito, registrar entrada no caixa fictícia (ou opcional)
-      // O usuário não pediu explicitamente addTransaction pro crédito mas é uma boa prática
-      // Porém vamos seguir estritamente o pedido.
+      // Se foi pago via crédito, opcionalmente registrar no caixa como entrada
+      if (status === "pago") {
+        await addTransaction(userId, {
+          description: `Pagamento (Crédito): ${jogador.nome} (${periodo})`,
+          amount: valor,
+          category: "Mensalidade",
+          type: "ENTRADA",
+          date: new Date().toISOString(),
+          playerId: jogador.id
+        });
+      }
 
       gerados++;
     }
@@ -210,6 +238,9 @@ export async function generateMatchBillings(
   );
   
   let gerados = 0;
+  const normalizedVenc = normalizeDate(dueDate);
+  const hoje = normalizeDate(new Date()).getTime();
+  const vencTime = normalizedVenc.getTime();
   
   for (const jogador of diaristasPresentes) {
     if (!jogador.id) continue;
@@ -227,10 +258,11 @@ export async function generateMatchBillings(
         jogadorId: jogador.id,
         nomeJogador: jogador.nome,
         vinculo: "Diarista",
-        status: "PENDENTE",
+        status: hoje > vencTime ? "atrasado" : "pendente",
         valor: amount,
         referencia: `Partida: ${matchTitle} - ${matchId}`,
-        dueDate: normalizeDate(dueDate)
+        periodo: new Date().toISOString().substring(0, 7),
+        dataVencimento: normalizedVenc
       });
       gerados++;
     }
@@ -247,7 +279,7 @@ export async function getPlayerBillings(activeTenantId: string, playerId: string
   const q = query(
     billsRef,
     where("jogadorId", "==", playerId),
-    orderBy("dueDate", "desc")
+    orderBy("dataVencimento", "desc")
   );
   
   const querySnapshot = await getDocs(q);
@@ -280,9 +312,9 @@ export async function getPendingPayments(userId: string, month: number, year: nu
   const players = await getPlayers(userId);
   const activeMonthly = players.filter(p => p.status === "Ativo" && p.vinculo === "Mensalista");
 
-  const referencia = `${String(month).padStart(2, '0')}/${year}`;
+  const periodo = `${year}-${String(month).padStart(2, '0')}`;
   const billsRef = collection(db, USERS_COLLECTION, userId, COLLECTION_NAME);
-  const q = query(billsRef, where("referencia", "==", referencia));
+  const q = query(billsRef, where("periodo", "==", periodo));
   const snap = await getDocs(q);
 
   const billsByPlayer: Record<string, Cobranca> = {};
@@ -294,18 +326,17 @@ export async function getPendingPayments(userId: string, month: number, year: nu
   const hojeTime = normalizeDate(new Date()).getTime();
 
   return activeMonthly
-    .filter(p => !billsByPlayer[p.id!] || billsByPlayer[p.id!].status !== "PAGO")
+    .filter(p => !billsByPlayer[p.id!] || billsByPlayer[p.id!].status !== "pago")
     .map(p => {
       const bill = billsByPlayer[p.id!];
-      // Se não existe cobrança, assume dia 10 do mês/ano solicitado
-      const dataVenc = bill?.dueDate ? normalizeDate(bill.dueDate) : normalizeDate(`${year}-${month}-10`);
+      const dataVenc = bill?.dataVencimento ? normalizeDate(bill.dataVencimento) : normalizeDate(`${year}-${month}-10`);
       
       const vencTime = dataVenc.getTime();
-      const status = hojeTime > vencTime ? "ATRASADO" : "PENDENTE";
+      const status = hojeTime > vencTime ? "atrasado" : "pendente";
 
       return { 
         ...p, 
-        dueDate: dataVenc.toISOString(), 
+        dataVencimento: dataVenc.toISOString(), 
         calculatedStatus: status 
       };
     });
@@ -323,31 +354,31 @@ export async function settleMonthlyPayment(
   year: number,
   amount: number
 ): Promise<void> {
-  const referencia = `${String(month).padStart(2, '0')}/${year}`;
+  const periodo = `${year}-${String(month).padStart(2, '0')}`;
+  const normalizedVenc = normalizeDate(`${year}-${month}-10`);
   const billsRef = collection(db, USERS_COLLECTION, userId, COLLECTION_NAME);
-  const q = query(billsRef, where("jogadorId", "==", playerId), where("referencia", "==", referencia));
+  const q = query(billsRef, where("jogadorId", "==", playerId), where("periodo", "==", periodo));
   const snap = await getDocs(q);
 
   if (!snap.empty) {
-    // Atualiza o primeiro encontrado que não esteja pago
     const docId = snap.docs[0].id;
     const cobranca = { id: docId, ...snap.docs[0].data() } as Cobranca;
     await payBilling(userId, docId, cobranca, amount);
   } else {
-    // Cria novo registro como PAGO
     await addDoc(billsRef, {
       jogadorId: playerId,
       nomeJogador: playerName,
       vinculo: "Mensalista",
-      status: "PAGO",
+      status: "pago",
       valor: amount,
-      referencia,
-      dueDate: normalizeDate(`${year}-${month}-10`) // Salva vencimento padrão se estiver criando na hora
+      periodo,
+      referencia: `${String(month).padStart(2, '0')}/${year}`,
+      dataVencimento: normalizedVenc,
+      dataPagamento: new Date()
     });
 
-    // Registra no Caixa
     await addTransaction(userId, {
-      description: `Pagamento: ${playerName} (${referencia})`,
+      description: `Pagamento: ${playerName} (${periodo})`,
       amount,
       category: "Mensalidade",
       type: "ENTRADA",
